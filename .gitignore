@@ -1,7 +1,41 @@
+# Python
 __pycache__/
 *.pyc
+*.py[cod]
+*.pyo
 .venv/
+venv/
+env/
 dist/
 build/
 *.egg-info/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# AI runtime
+.ai/runs/
+.ai/latest.txt
+
+# Temporary
+*.tmp
+*.bak

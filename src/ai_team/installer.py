@@ -1,8 +1,10 @@
 from pathlib import Path
 import shutil
+from . import __version__
 from .utils import sha256_file, save_json, load_json, template_root, profiles_root
 
 VERSION='3.0.0'; STATE_DIR='.ai-team'; STATE_FILE='state.json'
+VERSION = __version__; STATE_DIR = '.ai-team'; STATE_FILE = 'state.json'
 LOCAL_FILES={'PROJECT_CONTEXT.md','ai-team.config.json'}
 LOCAL_PREFIXES={'.agents/skills/project/'}
 def _is_local(rel): return rel in LOCAL_FILES or any(rel.startswith(p) for p in LOCAL_PREFIXES)
