@@ -1,24 +1,90 @@
 from pathlib import Path
-from datetime import datetime
-import re, subprocess, sys
-from .utils import run, which, load_json, ensure_git_repo, safe_slug
+from datetime import datetime, timezone
+import hashlib, json, os, re, subprocess, sys, time
+from .utils import run, which, load_json, save_json, ensure_git_repo, safe_slug
 
-def _capture(cmd, cwd, out, err, allow_failure=False, timeout=3600):
+_SECRET_RE = re.compile(r'(KEY|TOKEN|SECRET|PASSWORD|PASS|COOKIE|CREDENTIAL)', re.I)
+
+def _sanitized_env(allowlist=()):
+    env = {k: v for k, v in os.environ.items() if not _SECRET_RE.search(k)}
+    env.update({k: os.environ[k] for k in allowlist if k in os.environ and not _SECRET_RE.search(k)})
+    env['AI_TEAM_SUBPROCESS'] = '1'
+    return env
+
+def _now():
+    return datetime.now(timezone.utc).isoformat()
+
+def _load_manifest(project, run_id):
+    path = Path(project) / '.ai' / 'runs' / run_id / 'run.json'
+    if not path.exists():
+        raise RuntimeError(f'run manifest missing: {path}')
+    return load_json(path)
+
+def _validate_resume_context(project, manifest):
+    project = ensure_git_repo(Path(project).resolve())
+    branch = _git(project, 'branch', '--show-current').stdout.strip()
+    if branch != manifest.get('branch'):
+        raise RuntimeError(f'unsafe branch context: expected {manifest.get("branch")}, got {branch}')
+    base = _git(project, 'rev-parse', 'HEAD').stdout.strip()
+    if base != manifest.get('base_ref'):
+        raise RuntimeError('unsafe base context')
+    if _git(project, 'status', '--porcelain').stdout.strip():
+        raise RuntimeError('unsafe working tree context')
+    return project
+
+def _write_trace(path, record):
+    with path.open('a', encoding='utf-8') as f:
+        f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + '\\n')
+
+def _stage_capture(stage, manifest, manifest_path, trace_path, cmd, cwd, out, err, allow_failure=False):
+    started = _now(); start = time.monotonic(); manifest['stages'][stage]['status'] = 'running'; manifest['stages'][stage]['started_at'] = started; save_json(manifest_path, manifest)
+    try:
+        rc = _capture(cmd, cwd, out, err, allow_failure)
+        status = 'succeeded' if rc == 0 else 'failed'; error = None
+    except Exception as exc:
+        rc = None; status = 'failed'; error = {'class': type(exc).__name__, 'message': str(exc)}
+        raise
+    finally:
+        finished = _now(); manifest['stages'][stage].update(status=status, finished_at=finished, return_code=rc, artifact=str(out)); save_json(manifest_path, manifest)
+        _write_trace(trace_path, {'stage': stage, 'status': status, 'started_at': started, 'finished_at': finished, 'duration_ms': round((time.monotonic()-start)*1000), 'return_code': rc, 'artifact': str(out), 'error': error})
+    return rc
+
+
+def _record_stage(manifest, manifest_path, trace_path, stage, artifact, status='succeeded', return_code=0):
+    now = _now()
+    manifest['stages'][stage].update(status=status, started_at=manifest['stages'][stage].get('started_at', now), finished_at=now, return_code=return_code, artifact=str(artifact))
+    save_json(manifest_path, manifest)
+    _write_trace(trace_path, {'stage': stage, 'status': status, 'started_at': manifest['stages'][stage]['started_at'], 'finished_at': now, 'duration_ms': 0, 'return_code': return_code, 'artifact': str(artifact), 'error': None})
+
+def _eval_artifact(manifest, path, diff_check):
+    reasons = []
+    required = {'triage', 'primary', 'verifier'}
+    if not required.issubset(manifest['stages']): reasons.append('required stages missing')
+    if diff_check != 0: reasons.append('diff-check failed')
+    if manifest.get('final_verdict') not in {'PASS', 'PASS_WITH_NOTES'}: reasons.append('verdict not passing')
+    save_json(path, {'passed': not reasons, 'reasons': reasons, 'verdict': manifest.get('final_verdict'), 'diff_check': diff_check})
+
+
+def _capture(cmd, cwd, out, err, allow_failure=False, timeout=3600, repo_root=None, env_allowlist=()):
+    cwd = Path(cwd).resolve()
+    if repo_root is not None:
+        try:
+            cwd.relative_to(Path(repo_root).resolve())
+        except ValueError:
+            raise RuntimeError(f'cwd outside repository root: {cwd}')
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open('w', encoding='utf-8') as fo, err.open('w', encoding='utf-8') as fe:
         try:
-            p = subprocess.run(
-                cmd, cwd=str(cwd), text=True, stdout=fo, stderr=fe,
-                timeout=timeout, start_new_session=(sys.platform != 'win32'),
-            )
+            p = subprocess.run(cmd, cwd=str(cwd), text=True, stdout=fo, stderr=fe,
+                               timeout=timeout, env=_sanitized_env(env_allowlist),
+                               start_new_session=(sys.platform != 'win32'))
         except subprocess.TimeoutExpired as exc:
-            fe.write(f'Process timeout after {timeout}s: {exc}\n')
-            raise RuntimeError(
-                f"Polecenie przekroczyło timeout {timeout}s: {' '.join(cmd)}. Log: {err}"
-            ) from exc
+            fe.write(f'Process timeout after {timeout}s: {exc}\\n')
+            raise RuntimeError(f"Polecenie przekroczyło timeout {timeout}s: {' '.join(cmd)}. Log: {err}") from exc
     if p.returncode and not allow_failure:
         raise RuntimeError(f"Polecenie zakończone kodem {p.returncode}: {' '.join(cmd)}. Log: {err}")
     return p.returncode
+
 def _git(project,*args,check=True): return run(['git',*args],cwd=project,capture=True,check=check)
 def _read(p): return p.read_text(encoding='utf-8') if p.exists() else ''
 def _agy(config,prompt,agent,effort):
@@ -77,13 +143,18 @@ def run_team(project,user_prompt):
         branch=f'{prefix}{stamp}-{slug}'; print('==> branch:',branch); run(['git','switch','-c',branch],cwd=project)
     else: branch=current
     base=_git(project,'rev-parse','HEAD').stdout.strip(); (rd/'base-ref.txt').write_text(base+'\n',encoding='utf-8'); (rd/'branch.txt').write_text(branch+'\n',encoding='utf-8')
+    manifest_path = rd/'run.json'
+    stages = {name: {'status': 'pending'} for name in ('triage', 'primary', 'review', 'integration', 'verifier')}
+    manifest = {'run_id': run_id, 'base_ref': base, 'branch': branch, 'prompt_sha256': hashlib.sha256(user_prompt.encode()).hexdigest(), 'stages': stages, 'final_verdict': None, 'created_at': _now()}
+    save_json(manifest_path, manifest)
+    trace_path = rd/'trace.jsonl'; trace_path.write_text('', encoding='utf-8')
     print('==> Triage')
     tp=f'''Przeprowadź triage poniższego zadania w aktualnym repozytorium. Nie zmieniaj plików.\n\nUSER TASK:\n{user_prompt}\n'''
-    to,te=rd/'triage.txt',rd/'triage.stderr.txt'; _capture(_agy(config,tp,'triage',config.get('antigravity',{}).get('triageEffort','low')),project,to,te)
+    to,te=rd/'triage.txt',rd/'triage.stderr.txt'; _capture(_agy(config,tp,'triage',config.get('antigravity',{}).get('triageEffort','low')),project,to,te); _record_stage(manifest, manifest_path, trace_path, 'triage', to)
     triage=_read(to); m=re.search(r'(?im)^\s*RISK:\s*(LOW|MEDIUM|HIGH)\s*$',triage); risk=m.group(1).upper() if m else 'HIGH'; print(triage.strip()); print('==> risk:',risk)
     print('==> Gemini/Antigravity team')
     pp=f'''Wykonaj zadanie jako główny AI Engineering Team.\n\nRUN DIRECTORY:\n{rd}\n\nBASE REF:\n{base}\n\nRISK:\n{risk}\n\nTRIAGE:\n{triage}\n\nUSER TASK:\n{user_prompt}\n\nNie wykonuj push, merge ani deployment. Zewnętrzny review Claude/Codex uruchamia dispatcher.\n'''
-    impl=config.get('antigravity',{}).get('implementationEffort','high'); _capture(_agy(config,pp,'orchestrator',impl),project,rd/'primary.md',rd/'primary.stderr.txt')
+    impl=config.get('antigravity',{}).get('implementationEffort','high'); _capture(_agy(config,pp,'orchestrator',impl),project,rd/'primary.md',rd/'primary.stderr.txt'); _record_stage(manifest, manifest_path, trace_path, 'primary', rd/'primary.md')
     (rd/'status-after-primary.txt').write_text(_git(project,'status','--short').stdout,encoding='utf-8'); (rd/'diff-stat-after-primary.txt').write_text(_git(project,'diff','--stat',base).stdout,encoding='utf-8')
     completed=[]
     for reviewer in config.get('reviewPolicy',{}).get(risk,[]):
@@ -106,11 +177,15 @@ def run_team(project,user_prompt):
     if completed:
         print('==> Integrating external reviews'); listing='\n'.join(f'- {x}' for x in completed)
         ip=f'''Jesteś integratorem końcowym.\nUSER TASK:\n{user_prompt}\nRISK: {risk}\nBASE REF: {base}\nNiezależne review:\n{listing}\nSprawdź każdy finding samodzielnie. Potwierdzone napraw minimalnie, fałszywe alarmy odrzuć dowodem. Po ostatniej poprawce uruchom testy. Bez push/merge/deploy.\n'''
-        _capture(_agy(config,ip,'integrator',impl),project,rd/'integration.md',rd/'integration.stderr.txt')
+        _capture(_agy(config,ip,'integrator',impl),project,rd/'integration.md',rd/'integration.stderr.txt'); _record_stage(manifest, manifest_path, trace_path, 'integration', rd/'integration.md')
     print('==> Final verification'); listing='\n'.join(f'- {x}' for x in completed) if completed else 'NONE'
     vp=f'''Wykonaj końcową walidację.\nUSER TASK:\n{user_prompt}\nRISK: {risk}\nBASE REF: {base}\nREVIEW FILES:\n{listing}\nNie modyfikuj kodu. Sprawdź finalny diff, wymaganie i uruchom adekwatne testy.\n'''
-    vo,ve=rd/'final-verification.md',rd/'final-verification.stderr.txt'; _capture(_agy(config,vp,'verifier',config.get('antigravity',{}).get('verificationEffort','medium')),project,vo,ve)
+    vo,ve=rd/'final-verification.md',rd/'final-verification.stderr.txt'; _capture(_agy(config,vp,'verifier',config.get('antigravity',{}).get('verificationEffort','medium')),project,vo,ve); _record_stage(manifest, manifest_path, trace_path, 'verifier', vo)
     ver=_read(vo); m=re.search(r'(?im)^\s*VERDICT:\s*(PASS|PASS_WITH_NOTES|CHANGES_REQUIRED)\s*$',ver); verdict=m.group(1) if m else 'UNKNOWN'
+    manifest['final_verdict'] = verdict; manifest['finished_at'] = _now(); save_json(manifest_path, manifest)
+    for stage in manifest['stages']:
+        if manifest['stages'][stage]['status'] == 'pending': manifest['stages'][stage]['status'] = 'skipped'
+    _eval_artifact(manifest, rd/'eval.json', 0)
     (rd/'final-status.txt').write_text(_git(project,'status','--short').stdout,encoding='utf-8'); (rd/'final-diff-stat.txt').write_text(_git(project,'diff','--stat',base).stdout,encoding='utf-8')
     dc=_git(project,'diff','--check',base,check=False); (rd/'final-diff-check.txt').write_text((dc.stdout or '')+(dc.stderr or ''),encoding='utf-8')
     print('\n==> Gotowe'); print('Run:',run_id); print('Branch:',branch); print('Risk:',risk); print('Verdict:',verdict); print('Raporty:',rd); print('\n'+ver.strip())

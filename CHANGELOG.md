@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.0.1] - 2026-09-11
 
 ### Added
+- Durable run manifests, conservative resume validation, redacted JSONL traces, and atomic evaluation artifacts.
+- Sanitized subprocess environments with an explicit `AI_TEAM_SUBPROCESS` marker and repository CWD boundary checks.
 - Standard MIT License (`LICENSE`).
 - Comprehensive bilingual documentation (`README.md` in English and `README.pl.md` in Polish) with language switchers.
 - Project documents: `CONTRIBUTING.md`, `SECURITY.md`, and `CHANGELOG.md`.
