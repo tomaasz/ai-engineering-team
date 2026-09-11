@@ -1,7 +1,8 @@
 import argparse, sys
 from pathlib import Path
 from .installer import install,update,status,uninstall
-from .runner import run_team,doctor,_load_manifest,_validate_resume_context
+from .runner import run_team,doctor,_load_manifest,_validate_resume_context,_pipeline
+from .utils import load_json
 
 def resume_team(project, run_id):
     project = Path(project).resolve()
@@ -10,8 +11,16 @@ def resume_team(project, run_id):
         if not marker.exists(): raise RuntimeError('run manifest missing: latest marker')
         run_id = marker.read_text(encoding='utf-8').strip()
     manifest = _load_manifest(project, run_id)
-    _validate_resume_context(project, manifest)
-    raise RuntimeError('resume is conservative: failed stages must be re-run explicitly; no safe automatic retry available')
+    project = _validate_resume_context(project, manifest)
+    rd = project / '.ai' / 'runs' / run_id
+    prompt_file = rd / 'prompt.txt'
+    if not prompt_file.exists():
+        raise RuntimeError('cannot safely resume: persisted prompt input is missing')
+    cfg = project / 'ai-team.config.json'
+    if not cfg.exists(): raise RuntimeError('cannot safely resume: ai-team.config.json is missing')
+    prompt = prompt_file.read_text(encoding='utf-8').rstrip('\\n')
+    if not prompt: raise RuntimeError('cannot safely resume: persisted prompt is empty')
+    return _pipeline(project, prompt, manifest, rd, load_json(cfg))
 
 
 def _resume_args(x):
