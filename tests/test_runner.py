@@ -1,10 +1,12 @@
 import re
 import subprocess
+import sys
+import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
 
-from ai_team.runner import doctor, run_team, _agy
+from ai_team.runner import doctor, run_team, _agy, _capture
 from ai_team.installer import install
 from ai_team.utils import save_json, load_json
 
@@ -228,3 +230,34 @@ def test_availability_fallback_disabled_raises(tmp_path):
          patch("ai_team.runner._capture", side_effect=fake_capture):
         with pytest.raises(RuntimeError, match="Claude wymagany przez policy"):
             run_team(tmp_path, "High risk task without claude")
+
+
+def test_capture_timeout_terminates_and_records_timeout(tmp_path):
+    output = tmp_path / "out.txt"
+    error = tmp_path / "err.txt"
+    script = [sys.executable, "-c", "import time; time.sleep(10)"]
+
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="timeout"):
+        _capture(script, tmp_path, output, error, timeout=0.05)
+    assert time.monotonic() - started < 2
+    assert "timeout" in error.read_text(encoding="utf-8").lower()
+
+
+def test_doctor_deep_checks_cli_versions(tmp_path, capsys):
+    init_git_repo(tmp_path)
+    install(tmp_path, "core")
+
+    def fake_run(cmd, cwd=None, capture=False, check=True, timeout=None, **kwargs):
+        if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=f"{tmp_path}\n", stderr="")
+        assert "--version" in cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="tool 1.2.3\n", stderr="")
+
+    with patch("ai_team.runner.which", side_effect=lambda cmd: f"/usr/bin/{cmd}"), \
+         patch("ai_team.runner.subprocess.run", side_effect=fake_run):
+        assert doctor(tmp_path, deep=True) == 0
+
+    output = capsys.readouterr().out
+    assert "agy version: tool 1.2.3" in output
+    assert "deep" in output.lower()
