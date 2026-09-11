@@ -3,11 +3,21 @@ from datetime import datetime
 import re, subprocess, sys
 from .utils import run, which, load_json, ensure_git_repo, safe_slug
 
-def _capture(cmd,cwd,out,err,allow_failure=False):
-    out.parent.mkdir(parents=True,exist_ok=True)
-    with out.open('w',encoding='utf-8') as fo, err.open('w',encoding='utf-8') as fe:
-        p=subprocess.run(cmd,cwd=str(cwd),text=True,stdout=fo,stderr=fe)
-    if p.returncode and not allow_failure: raise RuntimeError(f"Polecenie zakończone kodem {p.returncode}: {' '.join(cmd)}. Log: {err}")
+def _capture(cmd, cwd, out, err, allow_failure=False, timeout=3600):
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open('w', encoding='utf-8') as fo, err.open('w', encoding='utf-8') as fe:
+        try:
+            p = subprocess.run(
+                cmd, cwd=str(cwd), text=True, stdout=fo, stderr=fe,
+                timeout=timeout, start_new_session=(sys.platform != 'win32'),
+            )
+        except subprocess.TimeoutExpired as exc:
+            fe.write(f'Process timeout after {timeout}s: {exc}\n')
+            raise RuntimeError(
+                f"Polecenie przekroczyło timeout {timeout}s: {' '.join(cmd)}. Log: {err}"
+            ) from exc
+    if p.returncode and not allow_failure:
+        raise RuntimeError(f"Polecenie zakończone kodem {p.returncode}: {' '.join(cmd)}. Log: {err}")
     return p.returncode
 def _git(project,*args,check=True): return run(['git',*args],cwd=project,capture=True,check=check)
 def _read(p): return p.read_text(encoding='utf-8') if p.exists() else ''
@@ -19,17 +29,36 @@ def _agy(config,prompt,agent,effort):
     if ac.get('fullAuto',False): a += ['--dangerously-skip-permissions']
     a += ['--print-timeout',str(ac.get('printTimeout','60m'))]; return a
 
-def doctor(project):
+def _probe_cli(name, path, timeout=15):
+    try:
+        result = subprocess.run(
+            [path, '--version'], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f'{type(exc).__name__}: {exc}'
+    output = (result.stdout or result.stderr).strip().splitlines()
+    version = output[0] if output else f'exit code {result.returncode}'
+    return result.returncode == 0, version
+
+
+def doctor(project, deep=False):
     project=project.resolve(); checks={'git':which('git'),'agy':which('agy'),'claude':which('claude'),'codex':which('codex'),'python':sys.executable}
     try: repo=ensure_git_repo(project); git_ok=True
     except Exception: repo=project; git_ok=False
-    print('AI Engineering Team - doctor')
+    print('AI Engineering Team - doctor' + (' (deep)' if deep else ''))
+    deep_ok = True
     for n,v in checks.items():
         req=n in {'git','agy','python'}
-        print(f"[{'OK' if v else ('FAIL' if req else 'WARN')}] {n}: {v or ('wymagane' if req else 'opcjonalne')}")
+        state = 'OK' if v else ('FAIL' if req else 'WARN')
+        print(f"[{state}] {n}: {v or ('wymagane' if req else 'opcjonalne')}")
+        if deep and v and n != 'python':
+            ok, detail = _probe_cli(n, v)
+            print(f"[{'OK' if ok else ('FAIL' if req else 'WARN')}] {n} version: {detail}")
+            if req and not ok: deep_ok = False
     print(f"[{'OK' if git_ok else 'FAIL'}] git repository: {repo}")
     cfg=project/'ai-team.config.json'; print(f"[{'OK' if cfg.exists() else 'FAIL'}] config: {cfg}")
-    return 0 if checks['git'] and checks['agy'] and git_ok and cfg.exists() else 1
+    return 0 if checks['git'] and checks['agy'] and git_ok and cfg.exists() and deep_ok else 1
 
 def run_team(project,user_prompt):
     if not which('git'): raise RuntimeError('Nie znaleziono git.')
