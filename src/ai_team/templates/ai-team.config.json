@@ -1,0 +1,20 @@
+{
+  "requireCleanWorkingTree": true,
+  "createBranchForEachRun": true,
+  "branchPrefix": "ai/",
+  "antigravity": {
+    "model": "gemini-3.8-flash-high",
+    "triageEffort": "low",
+    "implementationEffort": "high",
+    "verificationEffort": "medium",
+    "sandbox": true,
+    "fullAuto": false,
+    "printTimeout": "60m"
+  },
+  "reviewPolicy": {
+    "LOW": [],
+    "MEDIUM": ["codex"],
+    "HIGH": ["claude", "codex"]
+  },
+  "availabilityFallback": true
+}
