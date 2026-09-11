@@ -18,7 +18,7 @@ def resume_team(project, run_id):
         raise RuntimeError('cannot safely resume: persisted prompt input is missing')
     cfg = project / 'ai-team.config.json'
     if not cfg.exists(): raise RuntimeError('cannot safely resume: ai-team.config.json is missing')
-    prompt = prompt_file.read_text(encoding='utf-8').rstrip('\\n')
+    prompt = prompt_file.read_text(encoding='utf-8').rstrip('\n')
     if not prompt: raise RuntimeError('cannot safely resume: persisted prompt is empty')
     return _pipeline(project, prompt, manifest, rd, load_json(cfg))
 
