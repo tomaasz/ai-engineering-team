@@ -39,11 +39,7 @@ def _stage_capture(stage, manifest, manifest_path, trace_path, cmd, cwd, out, er
     entry.update(status='running', started_at=started); save_json(manifest_path, manifest)
     status, rc, error = 'succeeded', None, None
     try:
-        try:
-            rc = _capture(cmd, cwd, out, err, allow_failure=allow_failure, repo_root=repo_root)
-        except TypeError as exc:
-            if 'repo_root' not in str(exc): raise
-            rc = _capture(cmd, cwd, out, err, allow_failure=allow_failure)
+        rc = _capture(cmd, cwd, out, err, allow_failure=allow_failure, repo_root=repo_root)
         if rc != 0: status = 'failed'
     except Exception as exc:
         status = 'failed'; error = {'class': type(exc).__name__, 'message': str(exc)}
