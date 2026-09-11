@@ -59,7 +59,7 @@ def _record_stage(manifest, manifest_path, trace_path, stage, artifact, status='
     now = _now(); entry = manifest['stages'].setdefault(stage, {})
     entry.update(status=status, started_at=entry.get('started_at', now), finished_at=now, return_code=return_code, artifact=str(artifact))
     save_json(manifest_path, manifest)
-    _write_trace(trace_path, {'stage':stage,'status':status,'started_at':entry['started_at'],'finished_at':now,'duration_ms':0,'return_code':return_code,'artifact':str(artifact),'error':None})
+    _write_trace(trace_path, {'stage':stage,'status':status,'started_at':entry['started_at'],'finished_at':now,'duration_ms':0,'return_code':return_code,'artifact':Path(artifact).name,'error':None})
 
 def _eval_artifact(manifest, path, diff_check):
     reasons=[]
@@ -116,6 +116,9 @@ def doctor(project,deep=False):
 
 def _pipeline(project, prompt, manifest, rd, config):
     mp, tp = rd/'run.json', rd/'trace.jsonl'; base=manifest['base_ref']; impl=config.get('antigravity',{}).get('implementationEffort','high')
+    # Resume may encounter manifests written by older versions with a single review stage.
+    if 'review' in manifest['stages'] and 'review-claude' not in manifest['stages']:
+        manifest['stages'].pop('review', None)
     def stage(name, cmd, out, err, allow=False):
         if manifest['stages'].get(name,{}).get('status')=='succeeded': return 0
         return _stage_capture(name,manifest,mp,tp,cmd,project,out,err,allow_failure=allow,repo_root=project)
