@@ -92,7 +92,7 @@ def test_run_team_triage_routing_low(tmp_path):
 
     called_commands = []
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
         called_commands.append(cmd)
         out.parent.mkdir(parents=True, exist_ok=True)
         # Check if triage
@@ -122,7 +122,7 @@ def test_run_team_triage_routing_medium(tmp_path):
 
     called_commands = []
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
         called_commands.append(cmd)
         out.parent.mkdir(parents=True, exist_ok=True)
         if "triage" in cmd:
@@ -153,7 +153,7 @@ def test_run_team_triage_routing_high(tmp_path):
 
     called_commands = []
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
         called_commands.append(cmd)
         out.parent.mkdir(parents=True, exist_ok=True)
         if "triage" in cmd:
@@ -184,7 +184,7 @@ def test_run_team_changes_required_exit_code(tmp_path):
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "install ai-team"], cwd=tmp_path, check=True, capture_output=True)
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
         out.parent.mkdir(parents=True, exist_ok=True)
         if "triage" in cmd:
             out.write_text("RISK: LOW", encoding="utf-8")
@@ -212,7 +212,7 @@ def test_availability_fallback_disabled_raises(tmp_path):
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "update config"], cwd=tmp_path, check=True, capture_output=True)
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
         out.parent.mkdir(parents=True, exist_ok=True)
         if "triage" in cmd:
             out.write_text("RISK: HIGH", encoding="utf-8")
