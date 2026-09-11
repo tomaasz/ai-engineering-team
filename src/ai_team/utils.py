@@ -8,8 +8,8 @@ def sha256_file(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def run(cmd, cwd=None, capture=False, check=True):
-    kw = {'cwd': str(cwd) if cwd else None, 'text': True}
+def run(cmd, cwd=None, capture=False, check=True, timeout=None):
+    kw = {'cwd': str(cwd) if cwd else None, 'text': True, 'timeout': timeout}
     if capture:
         kw.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     p = subprocess.run(cmd, **kw)
