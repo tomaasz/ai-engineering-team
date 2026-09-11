@@ -8,7 +8,7 @@ Prywatny, wieloplatformowy framework do instalowania zespołu agentów AI w dowo
 ai-team install . --profile python
 ai-team doctor .
 ai-team run . "Dodaj import CSV wraz z testami"
-ai-team resume latest .  # safe validation; conservative retry semantics
+ai-team resume latest .  # retries failed/pending stages after safety checks
 ai-team update .
 ```
 Cross-platform multi-agent software engineering orchestrator for Gemini / Google Antigravity, Codex and Claude Code.
@@ -25,7 +25,7 @@ Cross-platform multi-agent software engineering orchestrator for Gemini / Google
 ## What It Is
 
 ## Durable runs and artifacts
-Each run stores `run.json`, append-only `trace.jsonl`, and atomic `eval.json` under `.ai/runs/<run-id>/`. Prompts are represented only by a SHA-256 hash in the manifest; traces never contain prompts or environment values. `ai-team resume <run-id> .` (or `latest`) validates branch, base commit, and clean working tree before retrying. The first version intentionally refuses unsafe or unsupported automatic retries; successful stages are never repeated.
+Each run stores `run.json`, append-only `trace.jsonl`, and atomic `eval.json` under `.ai/runs/<run-id>/`. Prompts are represented only by a SHA-256 hash in the manifest; traces and evaluations never contain prompts or environment values. `ai-team resume <run-id> .` (or `latest`) validates branch, base commit, and clean working tree, then retries failed/pending stages while skipping successful stages. Resume requires the persisted prompt and configuration; it does not recover missing artifacts, and unsafe branch/base/tree changes are refused.
 
 ## Bezpieczeństwo
 Każdy run pracuje na branchu `ai/...`. V3 nie wykonuje automatycznie `git push`, merge ani deployment. Subprocesses receive a sanitized environment and `AI_TEAM_SUBPROCESS=1`; configure only non-secret allowlisted names in code integrations. CWD must remain inside the repository boundary.
