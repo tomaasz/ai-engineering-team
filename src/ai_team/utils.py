@@ -21,7 +21,9 @@ def which(name): return shutil.which(name)
 def load_json(path: Path): return json.loads(path.read_text(encoding='utf-8'))
 def save_json(path: Path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    tmp = path.with_name(path.name + '.tmp')
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    tmp.replace(path)
 def package_root(): return Path(__file__).resolve().parent
 def template_root(): return package_root()/'templates'
 def profiles_root(): return package_root()/'profiles'
