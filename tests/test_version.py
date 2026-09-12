@@ -36,3 +36,4 @@ def test_version_consistency():
     assert pyproject_version == "3.0.1"
     assert pkg_version == "3.0.1"
     assert INSTALLER_VERSION == "3.0.1"
+

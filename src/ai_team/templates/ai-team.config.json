@@ -2,8 +2,14 @@
   "requireCleanWorkingTree": true,
   "createBranchForEachRun": true,
   "branchPrefix": "ai/",
+  "primaryProvider": "agy",
+  "models": {},
+  "agentTimeoutSeconds": 3600,
+  "runTimeoutSeconds": 14400,
+  "maxReviewRounds": 2,
+  "verification": {"commands": [], "noChecksReason": ""},
+  "riskPaths": {"HIGH": [], "MEDIUM": []},
   "antigravity": {
-    "model": "gemini-3.8-flash-high",
     "triageEffort": "low",
     "implementationEffort": "high",
     "verificationEffort": "medium",
@@ -16,5 +22,5 @@
     "MEDIUM": ["codex"],
     "HIGH": ["claude", "codex"]
   },
-  "availabilityFallback": true
+  "availabilityFallback": false
 }

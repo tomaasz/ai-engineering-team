@@ -32,4 +32,9 @@ HIGH — auth, uprawnienia, sekrety, migracje/dane, schema DB, deployment, kryty
 
 ## Review
 Każdy finding: Severity, Evidence, Impact, Minimal fix.
-Verdict: PASS / PASS WITH NOTES / CHANGES REQUIRED.
+W etapach wywoływanych przez runner zwracaj wyłącznie JSON:
+{"verdict":"PASS","unresolved":[],"summary":"dowody"}
+Verdict: PASS / PASS_WITH_NOTES / CHANGES_REQUIRED.
+Nierozwiązane BLOCKER/HIGH wymagają CHANGES_REQUIRED.
+Wymagane recenzje nie mogą być pomijane. Ostateczny wynik zależy także od komend
+weryfikacji uruchomionych przez runner i git diff --check.
