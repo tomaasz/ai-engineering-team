@@ -1,77 +1,37 @@
-# Architektura
-# Architektura AI Engineering Team
+# Architecture
 
-Centralne prywatne repo zawiera program `ai-team`, agentów, skille, profile i szablony VS Code.
-Centralne repozytorium zawiera program CLI `ai-team`, definicje agentów, zestawy umiejętności (Skills), profile instalacyjne oraz integracje ze środowiskiem IDE (VS Code tasks).
+The package contains the dispatcher, provider adapters, installer, profiles, agent instructions, skills, and IDE templates. Installation copies the selected profile into a Git project and records managed checksums and unresolved conflicts in `.ai-team/state.json`.
 
-Po `ai-team install` projekt dostaje m.in.:
-## Struktura po instalacji w projekcie
-
-Po wykonaniu polecenia `ai-team install . --profile <profil>` docelowy projekt otrzymuje m.in.:
+## Run pipeline
 
 ```text
-.agents/
-.claude/
-.vscode/tasks.json
-.ai-team/state.json
-.ai/runs/
-AI_TEAM.md
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-PROJECT_CONTEXT.md
-ai-team.config.json
-.agents/                  # Definicje agentów i umiejętności dla Google Antigravity
-  agents/                 # Role: architect, implementer, integrator, orchestrator, researcher, reviewer, test-engineer, triage, verifier
-  skills/                 # Moduły wiedzy (core, python, web, postgres, ocr itp.)
-.claude/                  # Konfiguracja i agenci dla Claude Code
-  agents/                 # Independent reviewer, debugger
-  skills/                 # Moduły wiedzy odpowiadające profilowi
-.vscode/tasks.json        # Zadania VS Code (Run prompt, Doctor, Update)
-.ai-team/                 # Stan wewnętrzny instalatora
-  state.json              # Sumy kontrolne SHA-256 zainstalowanych plików
-  conflicts/              # Miejsce odkładania konfliktów przy aktualizacjach
-.ai/                      # Środowisko uruchomieniowe (automatycznie dodane do .gitignore)
-  runs/                   # Historia wykonanych runów, logi i raporty
-  latest.txt              # Identyfikator ostatniego uruchomienia
-AI_TEAM.md                # Główne zasady zespołu, role, matryca ryzyka, DoD
-AGENTS.md                 # Konfiguracja i instrukcje dla OpenAI Codex
-CLAUDE.md                 # Konfiguracja dla Claude Code (niezależny reviewer)
-GEMINI.md                 # Konfiguracja dla Gemini / Antigravity (główny wykonawca)
-PROJECT_CONTEXT.md        # Kontekst projektu uzupełniany przez dewelopera / prompt bootstrap
-ai-team.config.json       # Konfiguracja działania zespołu, reguły review i sandbox
+prompt
+  -> read-only triage (JSON risk)
+  -> primary provider implementation
+  -> risk escalation from changed paths
+  -> independent reviews (JSON verdicts)
+  -> primary-provider integration when required
+  -> bounded review rounds
+  -> read-only final verifier (JSON verdict)
+  -> configured argv checks + git diff --check
+  -> result.json
 ```
 
-`state.json` zapisuje hash każdego zarządzanego pliku. Podczas update plik jest nadpisywany tylko wtedy, gdy od poprzedniej instalacji nie został ręcznie zmieniony.
-## Zarządzanie stanem i aktualizacje
+The primary provider may be `agy`, `codex`, or `claude`. Review policy must use distinct providers and cannot contain the primary. `LOW` needs zero or more reviewers, `MEDIUM` at least one, and `HIGH` at least two. Missing CLIs and failed or malformed reviews stop the run; `availabilityFallback` does not permit success.
 
-Plik `.ai-team/state.json` przechowuje sumę kontrolną SHA-256 każdego zarządzanego pliku z chwili instalacji lub ostatniej aktualizacji:
-- Podczas `ai-team update .` plik zarządzany jest nadpisywany nową wersją z frameworka **tylko wtedy**, gdy jego lokalna suma kontrolna nie uległa zmianie (plik nie był ręcznie modyfikowany).
-- Jeśli plik został lokalnie zmieniony przez użytkownika, aktualizator **nie nadpisuje** wersji lokalnej, lecz zapisuje nową wersję w katalogu `.ai-team/conflicts/`, umożliwiając manualny przegląd różnic.
-- Pliki lokalne (`PROJECT_CONTEXT.md`, `ai-team.config.json` oraz `.agents/skills/project/`) są zawsze zachowywane.
+Triage returns `{"risk":"LOW|MEDIUM|HIGH"}`. Reviews and final verification return `verdict`, `unresolved`, and `summary`. Passing verdicts cannot contain unresolved findings. The dispatcher parses JSON instead of searching prose for `PASS`.
 
-## Przepływ orkiestracji (Run Pipeline)
+Risk is reevaluated from the initial classification, changed-file count, built-in sensitive filename globs, and `riskPaths`. Filename matching remains a heuristic and does not understand code semantics.
 
-```text
-User prompt
-    ↓
-Triage (analiza zakresu i wyznaczenie poziomu ryzyka)
-    ↓
-Gemini / Antigravity Team (implementacja i testy)
-    ├── Architect
-    ├── Researcher
-    ├── Implementer
-    ├── Test Engineer
-    └── Reviewer
-    ↓
-Risk Gate (niezależna weryfikacja zewnętrzna)
-    ├── LOW    → Gemini
-    ├── MEDIUM → + Codex
-    └── HIGH   → + Claude + Codex
-    ↓
-Integrator (samodzielne rozstrzyganie findingów dowodem)
-    ↓
-Final Verifier (ostateczna walidacja testów i diffu bez modyfikacji kodu)
-    ↓
-Git branch (ai/...) + szczegółowy raport w .ai/runs/
-```
+Each run records its base ref, branch, prompt, stage output, stderr, check logs, and canonical `.ai/runs/<run-id>/result.json`. A generated branch is used by default. No automatic commit, push, merge, or deployment occurs.
+
+Verification commands run directly from `argv`, without a shell. A failed command, file changes during verification, failed `git diff --check`, `CHANGES_REQUIRED`, or exhausted review rounds prevents success. An explicit `noChecksReason` is allowed, but yields `PASS_WITH_NOTES`.
+
+## Boundaries
+
+- `agentTimeoutSeconds` limits one directly launched agent; `runTimeoutSeconds` limits the overall deadline; `maxReviewRounds` limits review/integration cycles.
+- There is no token or cost accounting and no automatic resume.
+- Timeout targets the direct process; complete descendant-process cleanup is not guaranteed on every platform.
+- Reviewers use read-only modes and filesystem snapshots, but share one repository. Independence from other reports is prompt-enforced too, so this is not container or host isolation.
+- Installer conflicts remain until `resolve`. Profile reductions may leave retired templates tracked until uninstall.
+- VS Code JSONC merge creates a backup, normalizes JSON, and can remove comments.

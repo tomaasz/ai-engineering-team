@@ -5,8 +5,32 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from ai_team.runner import doctor, run_team, _agy
-from ai_team.installer import install
+from ai_team.installer import install as framework_install
 from ai_team.utils import save_json, load_json
+
+
+def install(path, profile):
+    framework_install(path, profile)
+    cfg = load_json(path / 'ai-team.config.json')
+    cfg['verification'] = {'commands': [], 'noChecksReason': 'Fixture repository contains documentation only'}
+    save_json(path / 'ai-team.config.json', cfg)
+
+
+def structured_output(out, cmd):
+    """Fixtures emulate provider final-answer transport, not progress logs."""
+    import json
+    text = out.read_text(encoding='utf-8')
+    if text.startswith('RISK:'):
+        result = {'risk': text.split()[1]}
+    elif text.startswith('VERDICT:'):
+        result = {'verdict': text.split()[1], 'unresolved': [], 'summary': text}
+    elif cmd[0] in {'codex', 'claude'}:
+        result = {'verdict': 'PASS', 'unresolved': [], 'summary': text}
+    else:
+        return
+    out.write_text(json.dumps(result), encoding='utf-8')
+    if '--output-last-message' in cmd:
+        Path(cmd[cmd.index('--output-last-message') + 1]).write_text(json.dumps(result), encoding='utf-8')
 
 def init_git_repo(path: Path):
     subprocess.run(["git", "init", "-b", "main"], cwd=path, check=True, capture_output=True)
@@ -21,6 +45,8 @@ def init_git_repo(path: Path):
 def test_doctor_success(tmp_path):
     init_git_repo(tmp_path)
     install(tmp_path, "core")
+    subprocess.run(['git', 'add', '.'], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(['git', 'commit', '-m', 'setup'], cwd=tmp_path, check=True, capture_output=True)
 
     with patch("ai_team.runner.which") as mock_which:
         mock_which.side_effect = lambda cmd: f"/usr/bin/{cmd}"
@@ -100,6 +126,7 @@ def test_run_team_triage_routing_low(tmp_path):
             out.write_text("VERDICT: PASS\nAll tests passed", encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
+        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -131,6 +158,7 @@ def test_run_team_triage_routing_medium(tmp_path):
             out.write_text("VERDICT: PASS\nVerified", encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
+        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -164,6 +192,7 @@ def test_run_team_triage_routing_high(tmp_path):
             out.write_text("VERDICT: PASS_WITH_NOTES\nApproved", encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
+        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -190,6 +219,7 @@ def test_run_team_changes_required_exit_code(tmp_path):
             out.write_text("VERDICT: CHANGES_REQUIRED\nTests failed.", encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
+        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -216,6 +246,7 @@ def test_availability_fallback_disabled_raises(tmp_path):
             out.write_text("RISK: HIGH", encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
+        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -226,5 +257,5 @@ def test_availability_fallback_disabled_raises(tmp_path):
 
     with patch("ai_team.runner.which", side_effect=mock_which), \
          patch("ai_team.runner._capture", side_effect=fake_capture):
-        with pytest.raises(RuntimeError, match="Claude wymagany przez policy"):
+        with pytest.raises(RuntimeError, match="Required reviewers missing"):
             run_team(tmp_path, "High risk task without claude")

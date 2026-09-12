@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- Preserve pre-existing AI instructions and local changes across repeated installs and conflicting updates.
+- Keep retired templates tracked; normalize project operations to the Git root.
+- Merge JSONC VS Code tasks using ownership baselines and preserve custom entries.
+- Required reviewer failures, missing reviewers, failed checks and invalid verdicts now prevent success.
+- Create a unique branch for each run, including runs started on an existing `ai/` branch.
+
+### Added
+- Explicit conflict resolution (`resolve --strategy keep|upstream`), profile migration, profile listing and CLI version.
+- Validated provider selection (`agy`, `codex`, `claude`), structured results, risk escalation from changed paths and bounded review rounds.
+- Direct verification commands with working directories and timeouts, recorded exit codes and `result.json`.
+- Expanded readiness diagnostics, optional CLI probes, regression tests and bilingual bootstrap prompts.
+
+### Migration
+- Existing project configuration is preserved. Add `verification.commands` or a documented `verification.noChecksReason` before running.
+- Review policies require one independent provider for MEDIUM and two for HIGH; availability fallback no longer permits success.
+- Agent decision stages must emit the JSON format documented in `docs/ARCHITECTURE.md`.
+
 ## [3.0.1] - 2026-09-11
 
 ### Added

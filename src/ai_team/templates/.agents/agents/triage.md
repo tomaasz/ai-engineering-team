@@ -8,8 +8,6 @@ model: flash
 commandExecutionPolicy: sandbox
 skills: [skills/core/task-planning]
 ---
-Nie implementuj. Zwróć dokładnie:
-RISK: LOW|MEDIUM|HIGH
-SUMMARY: <cel>
-VERIFY: <metoda weryfikacji>
-NOTES: <krótko lub NONE>
+Nie implementuj. Zwróć wyłącznie obiekt JSON, bez bloków Markdown:
+{"risk":"LOW","summary":"cel","verify":"metoda weryfikacji"}
+Pole risk musi mieć wartość LOW, MEDIUM lub HIGH.

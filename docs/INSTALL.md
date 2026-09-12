@@ -1,114 +1,55 @@
-# Instalacja — Windows i Linux
+# Installation
 
-## Wymagania
-- Git
-- Python 3.10+
-- Antigravity CLI (`agy`)
-- opcjonalnie Claude Code (`claude`)
-- opcjonalnie Codex CLI (`codex`)
+## Central CLI
 
-Antigravity działa natywnie na Windows i Linux. Zaloguj `agy` interaktywnie co najmniej raz przed użyciem trybu automatycznego.
+Install Python 3.10+, Git, and `pipx`, then install a revision you have inspected:
 
-## Instalacja centralnego CLI
-
-Najwygodniej przez `pipx`.
-Najwygodniejszą metodą instalacji jest narzędzie `pipx`.
-
-### Prywatne repo przez SSH
-### Instalacja przez HTTPS (rekomendowana)
 ```bash
-pipx install "git+ssh://git@github.com/OWNER/ai-engineering-team.git"
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@<verified-commit-or-release>"
+ai-team --version
 ```
 
-Instalacja konkretnej wersji (np. `v3.0.1`):
-```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v3.0.1"
-```
+Do not present the existing `v3.0.1` tag as containing unreleased changes from the current branch. Pin the reviewed commit or a release created from it. Upgrading the CLI and updating project templates are separate actions:
 
-Aktualizacja centralnego programu:
 ```bash
 pipx upgrade ai-engineering-team
+ai-team update /path/to/project
 ```
 
-### Ze sklonowanego repo
-### Opcjonalnie: Instalacja przez SSH (dla deweloperów)
+For local development, use `./install-local.sh` on Linux or `.\install-local.ps1` on Windows.
+
+## Project setup
+
 ```bash
-pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
+ai-team profiles
+ai-team install . --profile core
 ```
 
-### Ze sklonowanego repozytorium (tryb lokalny)
-Windows:
-```powershell
-.\install-local.ps1
-```
+Packaged profiles include `core`, `python`, `web`, `postgres`, `ocr`, `geneteka`, and `full`. A profile selects templates and skills; it does not discover the stack or prove commands are correct.
 
-Linux:
+Installation preserves existing files. On collision it keeps the project copy, stages the incoming template in `.ai-team/conflicts/<path>`, and records a conflict. Local configuration (`PROJECT_CONTEXT.md`, `ai-team.config.json`, and `.agents/skills/project/`) is preserved on updates.
+
 ```bash
-./install-local.sh
+ai-team status .
+ai-team resolve . AGENTS.md --strategy keep
+# or
+ai-team resolve . AGENTS.md --strategy upstream
 ```
 
----
+`keep` accepts the project file. `upstream` installs the staged template. Neither performs a semantic merge; compare both copies first.
 
-## Instalacja do projektu
+VS Code tasks are merged by identifiers. JSONC comments and trailing commas can be read, but a successful merge creates a backup and writes normalized JSON, so formatting and comments may be lost.
 
-Przejdź do katalogu dowolnego projektu i zainstaluj wybrany profil:
+Change profile during update with `ai-team update . --profile web`. Files retired by a smaller profile can remain tracked until `uninstall`; review them when changing profiles.
+
+## Readiness
+
+Complete `PROJECT_CONTEXT.md` and configure real verification commands or an explicit `noChecksReason`. Review and commit installation changes. With default settings, `run` requires a clean working tree, an initial commit, and no unresolved conflicts.
+
 ```bash
-cd /path/to/project
-ai-team install . --profile python
+ai-team doctor . --probe
 ```
 
-Profile:
-- `core`
-- `python`
-- `web`
-- `postgres`
-- `ocr`
-- `geneteka`
-- `full`
-Dostępne profile:
-- `core` — bazowy zespół i uniwersalne szablony
-- `python` — zestaw dla projektów Python (jakość, testy, typowanie)
-- `web` — technologie frontendowe i automatyzacja przeglądarki
-- `postgres` — bezpieczne operacje bazodanowe i migracje
-- `ocr` — pipeline OCR i przetwarzanie dokumentów
-- `geneteka` — pipeline ETL dla danych genealogicznych
-- `full` — pełny zestaw wszystkich profili i kompetencji
+`doctor` checks configuration, Git state, executable paths, conflicts, and verification presence. `--probe` only invokes CLI help. It cannot validate login, credentials, model availability, quota, network access, or permissions. Run a harmless real request through each configured provider before reporting full readiness.
 
-## Test
-## Weryfikacja środowiska
-```bash
-ai-team doctor .
-```
-
-## Uruchomienie
-## Uruchomienie zadania
-```bash
-ai-team run . "Dodaj eksport CSV i testy"
-```
-
-VS Code:
-`Ctrl+Shift+P` → `Tasks: Run Task` → `AI Team: Run prompt`.
-
-## Aktualizacja frameworka w projekcie
-```bash
-ai-team update .
-```
-
-`PROJECT_CONTEXT.md`, `ai-team.config.json` oraz `.agents/skills/project/` są lokalne i nie są nadpisywane.
-Jeśli zmienisz ręcznie plik zarządzany przez framework, aktualizator zachowa lokalną wersję, a nową zapisze do `.ai-team/conflicts/`.
-- Pliki lokalne (`PROJECT_CONTEXT.md`, `ai-team.config.json` oraz `.agents/skills/project/`) są chronione i nigdy nie są nadpisywane.
-- Jeżeli ręcznie zmienisz plik zarządzany przez framework, aktualizator zachowa Twoją wersję, a wersję nadrzędną zapisze w katalogu `.ai-team/conflicts/`.
-
-## Linux / serwer VPS
-Na serwerze workflow jest taki sam:
-## Linux / serwer VPS / VS Code Remote SSH
-Na serwerze Linux proces wygląda identycznie:
-```bash
-cd ~/projects/my-project
-ai-team doctor .
-ai-team run . "Napraw failing integration tests"
-```
-
-Przy VS Code Remote SSH `ai-team` oraz `agy` muszą być zainstalowane po stronie zdalnego Linuxa, bo task jest wykonywany w zdalnym workspace.
-W przypadku korzystania z **VS Code Remote SSH**, programy `ai-team` oraz `agy` muszą być zainstalowane w środowisku zdalnym maszyny Linux, ponieważ zadania VS Code są wykonywane w zdalnym workspace.
+Remote SSH installations need `ai-team` and provider CLIs installed on the remote host.

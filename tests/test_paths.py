@@ -33,3 +33,4 @@ def test_safe_slug_trailing_hyphens_stripped():
     raw = "test feature ---"
     slug = safe_slug(raw)
     assert slug == "test-feature"
+

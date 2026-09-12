@@ -48,3 +48,4 @@ AI Engineering Team is an orchestrator that interacts with external AI CLI tools
 ### Sensitive Information & Secrets
 - Never pass private API tokens, passwords, `.env` files, or production credentials to agent prompts or commits.
 - Ensure project `.gitignore` files exclude all credential formats (`.env`, `*.pem`, `*.key`, `.ai/runs/`).
+
