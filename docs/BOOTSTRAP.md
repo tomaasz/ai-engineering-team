@@ -1,6 +1,6 @@
 # Agent bootstrap prompts
 
-Use one prompt below from the root of the target Git repository. Replace `<SOURCE>` with an inspected repository URL plus commit, a released version, or a trusted local checkout. Do not claim the existing `v3.0.1` tag contains current unreleased changes.
+Use one prompt below from the root of the target Git repository. The source is fixed to `https://github.com/tomaasz/ai-engineering-team` (`main` branch) — `main` is maintained to always be in an installable state, so no edits are needed before pasting the prompt. Record the exact commit SHA that was actually fetched in your report.
 
 ## English
 
@@ -8,7 +8,7 @@ Use one prompt below from the root of the target Git repository. Replace `<SOURC
 Install and configure AI Engineering Team in this repository.
 
 1. Inspect the repository before editing: find the Git root, current branch and status, project components, languages, package managers, documented build/test/lint/typecheck commands, existing AI instruction files, VS Code configuration, and sensitive paths. Do not guess commands and do not run migrations, deployment, production, or destructive operations.
-2. Obtain AI Engineering Team from <SOURCE>. Pin the exact inspected commit or released version. Distinguish installation/upgrading of the central CLI from `ai-team update`, which manages project templates. Record the selected source and version in your report.
+2. Obtain AI Engineering Team from `https://github.com/tomaasz/ai-engineering-team` (`main` branch). Pin the exact commit SHA you fetched. Distinguish installation/upgrading of the central CLI from `ai-team update`, which manages project templates. Record the selected commit and version in your report.
 3. Run `ai-team profiles`, choose the smallest suitable profile based on repository evidence, and run `ai-team install . --profile <profile>` at the Git root. Preserve all existing content. Inspect `.ai-team/conflicts/`; compare each project file with its staged template and resolve it explicitly with `ai-team resolve . <file> --strategy keep|upstream`. Use `keep` unless replacing the file is clearly justified; manually combine useful instructions before accepting the resulting project copy when needed.
 4. Complete `PROJECT_CONTEXT.md` from repository evidence. Configure `ai-team.config.json`:
    - choose `primaryProvider` from agy, codex, or claude;
@@ -32,10 +32,10 @@ YES is allowed only when there are no unresolved installation conflicts, configu
 ## Polski
 
 ```text
-Zainstaluj i skonfiguruj AI Engineering Team w tym repozytorium.
+Zainstaluj i skonfiguruj AI Engineering Team w tym repozytorium. Źródło jest stałe: `https://github.com/tomaasz/ai-engineering-team` (branch `main`) — `main` jest utrzymywany zawsze w stanie nadającym się do instalacji, więc nie trzeba niczego edytować przed wklejeniem promptu. Podaj w raporcie dokładny commit SHA, który faktycznie pobrałeś.
 
 1. Przed edycją przeanalizuj repozytorium: znajdź główny katalog Git, branch i status, komponenty projektu, języki, menedżery pakietów, udokumentowane polecenia build/test/lint/typecheck, istniejące instrukcje AI, konfigurację VS Code i wrażliwe ścieżki. Nie zgaduj poleceń. Nie uruchamiaj migracji, wdrożeń, operacji produkcyjnych ani destrukcyjnych.
-2. Pobierz AI Engineering Team z <SOURCE>. Przypnij dokładnie sprawdzony commit albo wydaną wersję. Rozróżnij instalację lub aktualizację centralnego CLI od `ai-team update`, które zarządza szablonami projektu. Podaj źródło i wersję w raporcie.
+2. Pobierz AI Engineering Team z `https://github.com/tomaasz/ai-engineering-team` (branch `main`). Przypnij dokładny pobrany commit SHA. Rozróżnij instalację lub aktualizację centralnego CLI od `ai-team update`, które zarządza szablonami projektu. Podaj commit i wersję w raporcie.
 3. Uruchom `ai-team profiles`, wybierz najmniejszy profil uzasadniony zawartością repozytorium i wykonaj `ai-team install . --profile <profil>` w głównym katalogu Git. Zachowaj istniejącą treść. Przejrzyj `.ai-team/conflicts/`; porównaj każdy plik projektu z odłożonym szablonem i rozwiąż konflikt jawnie przez `ai-team resolve . <plik> --strategy keep|upstream`. Wybierz `keep`, jeśli zastąpienie nie jest wyraźnie uzasadnione; w razie potrzeby najpierw połącz ręcznie użyteczne instrukcje w kopii projektu.
 4. Uzupełnij `PROJECT_CONTEXT.md` wyłącznie na podstawie dowodów w repozytorium. Skonfiguruj `ai-team.config.json`:
    - wybierz `primaryProvider`: agy, codex albo claude;
