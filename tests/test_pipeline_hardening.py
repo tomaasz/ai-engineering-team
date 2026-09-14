@@ -178,7 +178,8 @@ def test_doctor_flags_unfilled_project_context(project, capsys):
     assert 'TODO' in capsys.readouterr().out
 
 
-def test_dirty_working_tree_message_is_english(project):
+def test_dirty_working_tree_message_is_english(project, monkeypatch):
+    monkeypatch.setattr(runner, 'which', lambda x: x)
     (project / 'scratch.txt').write_text('wip\n', encoding='utf-8')
     with pytest.raises(RuntimeError) as excinfo:
         runner.run_team(project, 'Task')
