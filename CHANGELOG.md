@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.0] - 2026-09-14
+
+### Added
+- **Single-Provider Solo Mode (`--solo` / `--single-provider` / `"singleProvider": true`)**:
+  - Run the entire AI Engineering Team process on a single provider (`agy` / Gemini 3.8 Flash High) without requiring external CLI tools (`codex`, `claude`) or external quotas.
+  - Review policy dynamically adapts: in solo mode, independent review roles execute using isolated read-only `primaryProvider` processes (`--mode plan`, `--sandbox`, zero write permissions).
+  - Works seamlessly with `ai-team run --solo` or by setting `"singleProvider": true` in `ai-team.config.json`.
+  - Added `--solo` flag to `ai-team doctor` to verify system readiness specifically for solo workflows without flagging missing multi-provider CLIs.
+- **Reviewer Availability Fallback (`availabilityFallback`)**:
+  - Automatically enabled by default to prevent workflow interruptions when external reviewer services hit quota limits, rate limits (HTTP 429), auth failures, or network timeouts.
+  - If an external reviewer CLI fails during review execution, the runner catches the error, logs `[FALLBACK] Reviewer '<reviewer>' failed (...). Falling back to isolated '<primary>' reviewer.`, and immediately re-executes the review using an isolated read-only primary provider.
+  - Saves dedicated fallback artifacts (`review-<round>-<reviewer>-fallback.json`) and flags `fallbackFrom` in the final review report.
+  - Configurable via `"availabilityFallback": true/false` in `ai-team.config.json` or CLI flags `--availability-fallback` / `--no-availability-fallback`.
+
 ## [4.5.0] - 2026-09-14
 
 ### Added

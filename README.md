@@ -100,9 +100,9 @@ Different model architectures have distinct training biases, limitations, and bl
 - **Python**: 3.10 or newer
 - **Git**: Installed and accessible in `$PATH`
 - **Agent CLI Tools**:
-  - `agy` (Google Antigravity CLI) — **Required** (primary executor)
-  - `codex` (OpenAI Codex CLI) — Optional (recommended for MEDIUM/HIGH reviews)
-  - `claude` (Anthropic Claude Code CLI) — Optional (recommended for HIGH reviews)
+  - `agy` (Google Antigravity CLI) — **Required** (primary executor; powers both full multi-model teams and solo mode)
+  - `codex` (OpenAI Codex CLI) — Optional (used for consensus reviews; automatic fallback to `agy` if missing or quota exhausted)
+  - `claude` (Anthropic Claude Code CLI) — Optional (used for high-risk reviews; automatic fallback to `agy` if missing or quota exhausted)
 
 > [!NOTE]
 > Log in to `agy`, `claude`, and `codex` interactively in your terminal at least once before running unattended tasks.
@@ -124,6 +124,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.5.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.6.0"
 ```
 
 ### Upgrading
@@ -169,9 +170,11 @@ pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
    ai-team doctor .
    ```
 
-4. Run a task (optionally in an isolated worktree):
+4. Run a task (optionally in an isolated worktree or solo mode):
    ```bash
    ai-team run . "Add CSV export feature with full test coverage" --worktree
+   # or run in solo mode (100% agy/Gemini, no external CLIs/quotas required):
+   ai-team run . "Add CSV export feature" --solo
    ```
    *In `--worktree` mode, changes are isolated in a temporary worktree. When the run finishes, the CLI automatically prompts:*
    ```text

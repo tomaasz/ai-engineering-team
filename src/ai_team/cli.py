@@ -36,6 +36,8 @@ def parser():
     x = s.add_parser('doctor')
     x.add_argument('project', nargs='?', default='.')
     x.add_argument('--probe', action='store_true')
+    x.add_argument('--solo', '--single-provider', dest='solo', action='store_true', default=None,
+                   help='Verify readiness for solo mode with primaryProvider only')
 
     x = s.add_parser('resolve')
     x.add_argument('project')
@@ -60,6 +62,12 @@ def parser():
     x.add_argument('--auto-discard', '--discard', dest='auto_discard', action='store_true', help='Automatically discard changes and delete temporary branch')
     x.add_argument('--non-interactive', action='store_true', help='Do not prompt interactively after isolated run')
     x.add_argument('--no-auto-skills', action='store_true', help='Disable automatic and proactive skill provisioning by AI agents')
+    x.add_argument('--solo', '--single-provider', dest='solo', action='store_true', default=None,
+                   help='Run in solo mode with primaryProvider only (bypasses external reviewer CLI requirements)')
+    x.add_argument('--availability-fallback', dest='availability_fallback', action='store_true', default=None,
+                   help='Enable automatic fallback to isolated primaryProvider when reviewers fail or are missing')
+    x.add_argument('--no-availability-fallback', dest='availability_fallback', action='store_false',
+                   help='Disable automatic fallback to isolated primaryProvider')
 
     x = s.add_parser('resume')
     x.add_argument('run_id')
@@ -211,15 +219,17 @@ def main():
                 return 0
 
         if a.command == 'doctor':
-            return doctor(project, a.probe)
+            return doctor(project, a.probe, solo=getattr(a, 'solo', None))
         if a.command == 'run':
             prompt = a.prompt_opt or a.prompt or input('What should the AI Engineering Team do? ').strip()
             if not prompt:
                 raise RuntimeError('Prompt is empty.')
             auto_skills = False if getattr(a, 'no_auto_skills', False) else None
+            solo = getattr(a, 'solo', None)
+            fallback = getattr(a, 'availability_fallback', None)
             return run_team(project, prompt, use_worktree=a.worktree, auto_merge=a.auto_merge,
                             auto_discard=a.auto_discard, non_interactive=a.non_interactive,
-                            auto_skills=auto_skills)
+                            auto_skills=auto_skills, solo=solo, availability_fallback=fallback)
         if a.command == 'runs':
             return runs(project)
         if a.command == 'resume':

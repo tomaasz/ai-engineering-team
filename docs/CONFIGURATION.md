@@ -10,6 +10,8 @@
   "models": {"agy": "model-id", "claude": {"default": "opus", "triage": "haiku"}},
   "providerArgs": {"codex": {"reviewer": ["--reasoning-effort", "medium"]}},
   "roleProviders": {"integrator": "codex"},
+  "singleProvider": false,
+  "availabilityFallback": true,
   "requireCleanWorkingTree": true,
   "createBranchForEachRun": true,
   "reuseBranchForFollowUp": false,
@@ -42,9 +44,13 @@
 
 `primaryProvider` accepts `agy`, `codex`, or `claude`.
 
-`reviewPolicy` must define exactly `LOW`, `MEDIUM`, and `HIGH`. Reviewers must be supported providers, unique within a level, and different from `primaryProvider`. `MEDIUM` needs at least one reviewer and `HIGH` at least two. `LOW` needs one as well: the model that wrote the change should not be the only judge of it. Set `allowUnreviewedLowRisk` to `true` to accept `"LOW": []`, and record why.
+`singleProvider` (boolean, default `false`): when `true` (or via `--solo` on the CLI), runs the entire engineering lifecycle using `primaryProvider` only (`agy` / Gemini 3.8 Flash High). In this mode, external reviewer CLIs (`codex`, `claude`) and external API quotas are not required; reviews run in isolated read-only `primaryProvider` processes (`--mode plan`, `--sandbox`).
 
-Because risk escalates from the real diff after implementation, **every** reviewer named at any level must be installed before the run starts. A missing one fails the run immediately rather than after the implementation stage has been paid for. A required reviewer that is missing or fails does not fall back to success. `availabilityFallback` may remain in an older configuration for compatibility, but the runner never reads it.
+`availabilityFallback` (boolean, default `true`): when enabled, ensures that runs never crash due to external reviewer CLI absence or runtime API quota exhaustion (HTTP 429, auth errors, network timeouts). If an external reviewer fails, the runner automatically falls back to an isolated read-only instance of `primaryProvider` and logs `[FALLBACK]`.
+
+`reviewPolicy` must define exactly `LOW`, `MEDIUM`, and `HIGH`. In standard multi-provider mode (`singleProvider: false`), reviewers must be supported providers, unique within a level, and different from `primaryProvider`. `MEDIUM` needs at least one reviewer and `HIGH` at least two. `LOW` needs one as well: the model that wrote the change should not be the only judge of it. Set `allowUnreviewedLowRisk` to `true` to accept `"LOW": []`, and record why. In `singleProvider` mode, `reviewPolicy` automatically defaults to `primaryProvider` for all risk tiers.
+
+Because risk escalates from the real diff after implementation, in standard multi-provider mode without fallback, all reviewers named at any level must be installed before the run starts. When `availabilityFallback` is active (default), missing reviewer CLIs emit an informative warning and automatically delegate reviews to `primaryProvider`.
 
 `roleProviders.integrator` routes the "resolve review findings" stage to a provider other than the primary — useful when one model reviews better than it writes, or vice versa. The integrator may not be the *only* reviewer at any level, otherwise its own fix would never get an independent verdict.
 

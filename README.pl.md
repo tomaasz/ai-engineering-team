@@ -100,9 +100,9 @@ Różne architektury modeli posiadają odmienne ograniczenia, specyfikę danych 
 - **Python**: 3.10 lub nowszy
 - **Git**: Zainstalowany i dostępny w `$PATH`
 - **Narzędzia CLI agentów**:
-  - `agy` (Google Antigravity CLI) — **Wymagane** (główny wykonawca)
-  - `codex` (OpenAI Codex CLI) — Opcjonalne (rekomendowane dla review MEDIUM/HIGH)
-  - `claude` (Anthropic Claude Code CLI) — Opcjonalne (rekomendowane dla review HIGH)
+  - `agy` (Google Antigravity CLI) — **Wymagane** (główny wykonawca; obsługuje zarówno zespoły wielomodelowe, jak i tryb solo)
+  - `codex` (OpenAI Codex CLI) — Opcjonalne (dla konsensusu review; automatyczny fallback do `agy` w razie braku lub wyczerpania limitu)
+  - `claude` (Anthropic Claude Code CLI) — Opcjonalne (dla review HIGH; automatyczny fallback do `agy` w razie braku lub wyczerpania limitu)
 
 > [!NOTE]
 > Zaloguj narzędzia `agy`, `claude` oraz `codex` interaktywnie w terminalu co najmniej raz przed uruchomieniem zadań nienadzorowanych.
@@ -124,6 +124,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.5.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.6.0"
 ```
 
 ### Aktualizacja
@@ -169,9 +170,11 @@ pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
    ai-team doctor .
    ```
 
-4. Uruchom zadanie (opcjonalnie w odizolowanym worktree):
+4. Uruchom zadanie (opcjonalnie w odizolowanym worktree lub trybie solo):
    ```bash
    ai-team run . "Dodaj eksport do pliku CSV wraz z pełnym zestawem testów" --worktree
+   # lub uruchom w trybie solo (100% agy/Gemini, bez wymogu zewn. CLI i limitów):
+   ai-team run . "Dodaj eksport do pliku CSV" --solo
    ```
    *W trybie `--worktree` agenci pracują w odizolowanym katalogu roboczym. Po zakończeniu zadania CLI automatycznie pyta:*
    ```text

@@ -9,6 +9,20 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.6.0] - 2026-09-14
+
+### Added
+- **Tryb pojedynczego dostawcy Solo (`--solo` / `--single-provider` / `"singleProvider": true`)**:
+  - Umożliwia realizację pełnego cyklu inżynieryjnego przy użyciu wyłącznie jednego dostawcy (`agy` / Gemini 3.8 Flash High) bez wymogu posiadania zewnętrznych narzędzi CLI (`codex`, `claude`) ani zewnętrznych limitów API (quota).
+  - Polityka recenzji automatycznie się dostosowuje: w trybie solo role recenzenta są wykonywane przez odizolowane, wyłącznie do odczytu procesy `primaryProvider` (`--mode plan`, `--sandbox`, brak uprawnień zapisu).
+  - Działa bezpośrednio z flagą `ai-team run --solo` lub poprzez wpis `"singleProvider": true` w `ai-team.config.json`.
+  - Dodano flagę `--solo` do komendy `ai-team doctor`, weryfikującą gotowość środowiska do pracy solo bez zgłaszania braków zewnętrznych CLI.
+- **Odporność na limity i awarie recenzentów (`availabilityFallback`)**:
+  - Domyślnie aktywny mechanizm zapobiegający przerwaniu pracy w przypadku wyczerpania quota, przekroczenia limitów zapytań (HTTP 429), błędów autoryzacji czy awarii sieci u zewnętrznych recenzentów.
+  - W razie błędu zewnętrznego CLI recenzenta runner loguje komunikat `[FALLBACK]` i bez przerywania pracy płynnie deleguje wykonanie recenzji do odizolowanej instancji dostawcy głównego (`agy`).
+  - Wyniki zapisywane są w dedykowanych plikach `review-<round>-<reviewer>-fallback.json` z oznaczeniem `fallbackFrom` w końcowym raporcie wykonania.
+  - Możliwość konfiguracji w `ai-team.config.json` (`"availabilityFallback": true/false`) lub za pomocą flag CLI `--availability-fallback` / `--no-availability-fallback`.
+
 ## [4.5.0] - 2026-09-14
 
 ### Added

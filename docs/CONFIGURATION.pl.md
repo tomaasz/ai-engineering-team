@@ -11,6 +11,8 @@
   "models": {"agy": "model-id", "claude": {"default": "opus", "triage": "haiku"}},
   "providerArgs": {"codex": {"reviewer": ["--reasoning-effort", "medium"]}},
   "roleProviders": {"integrator": "codex"},
+  "singleProvider": false,
+  "availabilityFallback": true,
   "requireCleanWorkingTree": true,
   "createBranchForEachRun": true,
   "reuseBranchForFollowUp": false,
@@ -43,9 +45,13 @@
 
 `primaryProvider` przyjmuje `agy`, `codex` albo `claude`.
 
-`reviewPolicy` musi definiować dokładnie `LOW`, `MEDIUM` i `HIGH`. Recenzenci muszą być obsługiwanymi dostawcami, unikalnymi w obrębie poziomu i różnymi od `primaryProvider`. `MEDIUM` wymaga co najmniej jednego recenzenta, a `HIGH` co najmniej dwóch. `LOW` również wymaga jednego: model, który napisał zmianę, nie powinien być jej jedynym sędzią. Ustaw `allowUnreviewedLowRisk` na `true`, aby przyjąć `"LOW": []`, i zapisz dlaczego.
+`singleProvider` (boolean, domyślnie `false`): gdy `true` (lub po przekazaniu flagi `--solo` w CLI), realizuje pełen proces inżynieryjny przy użyciu wyłącznie `primaryProvider` (`agy` / Gemini 3.8 Flash High). W tym trybie narzędzia zewnętrzne (`codex`, `claude`) oraz zewnętrzne limity API nie są wymagane; recenzje odbywają się w odizolowanych procesach read-only `primaryProvider` (`--mode plan`, `--sandbox`).
 
-Ponieważ ryzyko eskaluje na podstawie rzeczywistego diffu po implementacji, **każdy** recenzent wymieniony na dowolnym poziomie musi być zainstalowany przed startem przebiegu. Brak któregokolwiek przerywa przebieg od razu, a nie dopiero po opłaceniu etapu implementacji. Brakujący lub zawodzący wymagany recenzent nie daje fallbacku do sukcesu. `availabilityFallback` może pozostać w starszej konfiguracji dla zgodności, ale runner nigdy go nie czyta.
+`availabilityFallback` (boolean, domyślnie `true`): gdy aktywny, gwarantuje odporność na brak zainstalowanych CLI zewnętrznych recenzentów lub wyczerpanie ich limitów zapytań (HTTP 429, błędy auth, timeouty). W razie awarii recenzenta runner płynnie przełącza się na odizolowaną instancję `primaryProvider`, logując ostrzeżenie `[FALLBACK]`.
+
+`reviewPolicy` musi definiować dokładnie `LOW`, `MEDIUM` i `HIGH`. W standardowym trybie wielomodelowym (`singleProvider: false`) recenzenci muszą być obsługiwanymi dostawcami, unikalnymi w obrębie poziomu i różnymi od `primaryProvider`. `MEDIUM` wymaga co najmniej jednego recenzenta, a `HIGH` co najmniej dwóch. `LOW` również wymaga jednego: model, który napisał zmianę, nie powinien być jej jedynym sędzią. Ustaw `allowUnreviewedLowRisk` na `true`, aby przyjąć `"LOW": []`, i zapisz dlaczego. W trybie `singleProvider` polityka automatycznie domyślnie przyjmuje `primaryProvider` dla wszystkich poziomów ryzyka.
+
+Ponieważ ryzyko eskaluje na podstawie rzeczywistego diffu po implementacji, w trybie bez fallbacku każdy recenzent wymieniony na dowolnym poziomie musi być zainstalowany przed startem przebiegu. Gdy aktywny jest `availabilityFallback` (domyślnie), brakujące zewnętrzne CLI emitują ostrzeżenie informacyjne i automatycznie przekazują zadanie recenzji do `primaryProvider`.
 
 `roleProviders.integrator` kieruje etap rozstrzygania findingów do dostawcy innego niż główny — przydatne, gdy jeden model lepiej recenzuje, niż pisze, albo odwrotnie. Integrator nie może być *jedynym* recenzentem na żadnym poziomie, bo jego własna poprawka nigdy nie dostałaby niezależnego werdyktu.
 

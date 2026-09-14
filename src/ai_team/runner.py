@@ -373,7 +373,7 @@ def _risk(project, base, initial, config):
     return levels[level]
 
 
-def doctor(project, probe=False):
+def doctor(project, probe=False, solo=None):
     """Static readiness; optional help probes do not claim authentication success."""
     problems = []
     try:
@@ -382,9 +382,14 @@ def doctor(project, probe=False):
     except Exception as exc:
         print(f'[FAIL] {exc}')
         return 1
-    required = {'git', config.get('primaryProvider', 'agy')}
-    for reviewers in config.get('reviewPolicy', DEFAULT_POLICY).values():
-        required.update(reviewers)
+    if solo is not None:
+        config['singleProvider'] = bool(solo)
+    single_provider = config.get('singleProvider', False)
+    primary = config.get('primaryProvider', 'agy')
+    required = {'git', primary}
+    if not single_provider:
+        for reviewers in config.get('reviewPolicy', DEFAULT_POLICY).values():
+            required.update(reviewers)
     for name in sorted(required):
         executable = which(name)
         print(f"[{'OK' if executable else 'FAIL'}] {name}: {executable or 'missing'}")
@@ -529,6 +534,8 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
         risk = _result(triage, 'risk', {'LOW', 'MEDIUM', 'HIGH'}, primary, rd / 'triage.json')['risk']
 
         def require_reviewers(level):
+            if config.get('singleProvider', False):
+                return [primary]
             reviewers = config.get('reviewPolicy', DEFAULT_POLICY)[level]
             missing = [x for x in reviewers if not which(x)]
             if missing:
@@ -569,13 +576,29 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
             before = _snapshot(project)
             for reviewer in reviewers:
                 filename = f'review-{round_number}-{reviewer}.json'
-                text = _ask(config, project, rd, reviewer, context + f'RISK: {risk}\n'
-                    + _text(config, 'review').format(patch=patch, base=base) + _verdict_prompt(config),
-                    'reviewer', filename, True)
-                result = _result(text, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'},
-                                 reviewer, rd / filename)
-                report['reviews'].append({'provider': reviewer, 'round': round_number, **result})
-                reviews.append((filename, result))
+                fallback_enabled = config.get('availabilityFallback', False)
+                try:
+                    text = _ask(config, project, rd, reviewer, context + f'RISK: {risk}\n'
+                        + _text(config, 'review').format(patch=patch, base=base) + _verdict_prompt(config),
+                        'reviewer', filename, True)
+                    result = _result(text, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'},
+                                     reviewer, rd / filename)
+                    report['reviews'].append({'provider': reviewer, 'round': round_number, **result})
+                    reviews.append((filename, result))
+                except Exception as exc:
+                    if fallback_enabled and reviewer != primary:
+                        print(f"[FALLBACK] Reviewer '{reviewer}' failed ({exc}). Falling back to isolated '{primary}' reviewer.")
+                        fallback_filename = f'review-{round_number}-{reviewer}-fallback.json'
+                        text = _ask(config, project, rd, primary, context + f'RISK: {risk}\n'
+                            + _text(config, 'review').format(patch=patch, base=base) + _verdict_prompt(config),
+                            'reviewer', fallback_filename, True)
+                        result = _result(text, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'},
+                                         primary, rd / fallback_filename)
+                        result['fallbackFrom'] = reviewer
+                        report['reviews'].append({'provider': primary, 'fallbackFrom': reviewer, 'round': round_number, **result})
+                        reviews.append((fallback_filename, result))
+                    else:
+                        raise
             if not any(result['verdict'] == 'CHANGES_REQUIRED' for _, result in reviews):
                 break
             if round_number == max_rounds:
@@ -789,9 +812,14 @@ def _prompt_worktree_merge(project, base, branch, current, run_id, config,
                 print("Invalid choice. Please choose: [y]es, [d]iff, [x] discard, [n]o.")
 
 
-def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_discard=None, non_interactive=False, auto_skills=None):
+def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_discard=None,
+             non_interactive=False, auto_skills=None, solo=None, availability_fallback=None):
     project = ensure_git_repo(project.resolve())
     config = load_config(project)
+    if solo is not None:
+        config['singleProvider'] = bool(solo)
+    if availability_fallback is not None:
+        config['availabilityFallback'] = bool(availability_fallback)
     if auto_skills is not None:
         config['autoSkills'] = auto_skills
     if use_worktree is None:
@@ -799,13 +827,15 @@ def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_disc
     primary = config.get('primaryProvider', 'agy')
     if not which(primary):
         raise RuntimeError(f'Missing primary CLI: {primary}')
-    # Risk escalates from the real diff, so every level's reviewers must be present up front:
-    # discovering a missing CLI after the implementation stage wastes the whole run.
-    missing = sorted({x for reviewers in config.get('reviewPolicy', DEFAULT_POLICY).values()
-                      for x in reviewers if not which(x)})
-    if missing:
-        raise RuntimeError('Reviewer CLI missing and may be required after risk escalation: '
-                           + ', '.join(missing))
+    single_provider = config.get('singleProvider', False)
+    if single_provider:
+        config['reviewPolicy'] = {k: [primary] for k in ('LOW', 'MEDIUM', 'HIGH')}
+    else:
+        missing = sorted({x for reviewers in config.get('reviewPolicy', DEFAULT_POLICY).values()
+                          for x in reviewers if not which(x)})
+        if missing:
+            raise RuntimeError('Reviewer CLI missing and may be required after risk escalation: '
+                               + ', '.join(missing))
     state = load_json(project / '.ai-team/state.json')
     if state.get('conflicts'):
         raise RuntimeError('Resolve installation conflicts before running')
@@ -837,7 +867,6 @@ def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_disc
         try:
             if (project / '.ai-team').is_dir() and not (worktree_dir / '.ai-team').exists():
                 shutil.copytree(project / '.ai-team', worktree_dir / '.ai-team')
-            return _execute(worktree_dir, config, rd, run_id, base, branch, user_prompt, primary, verification, main_repo=project)
             rc = _execute(worktree_dir, config, rd, run_id, base, branch, user_prompt, primary, verification, main_repo=project)
         finally:
             status_out = _git(worktree_dir, 'status', '--porcelain', check=False).stdout.strip()

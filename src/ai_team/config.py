@@ -10,7 +10,7 @@ EFFORTS = ('low', 'medium', 'high')
 DEFAULT_POLICY = {'LOW': ['codex'], 'MEDIUM': ['codex'], 'HIGH': ['claude', 'codex']}
 BOOLEAN_KEYS = ('requireCleanWorkingTree', 'createBranchForEachRun', 'availabilityFallback',
                 'reuseBranchForFollowUp', 'skipFinalVerificationAtLow', 'allowUnreviewedLowRisk',
-                'useWorktree', 'autoMerge', 'autoSkills')
+                'useWorktree', 'autoMerge', 'autoSkills', 'singleProvider')
 # Keys the runner actually reads. Anything else is drift and must fail loudly.
 ANTIGRAVITY_KEYS = {'model', 'sandbox', 'fullAuto', 'printTimeout',
                     'triageEffort', 'implementationEffort', 'verificationEffort'}
@@ -68,6 +68,8 @@ def _validate_role_providers(config, policy):
         return
     if integrator not in PROVIDERS:
         raise ValueError(f'roleProviders.integrator must be one of {", ".join(PROVIDERS)}')
+    if config.get('singleProvider', False):
+        return
     for risk, reviewers in policy.items():
         if isinstance(reviewers, list) and reviewers == [integrator]:
             raise ValueError(f'roleProviders.integrator cannot be the only {risk} reviewer; '
@@ -125,18 +127,32 @@ def validate(config, project):
             raise ValueError(f'antigravity.{key} must be one of {", ".join(EFFORTS)} (Effort level)')
     _validate_models(config)
     _validate_provider_args(config)
+    single_provider = config.get('singleProvider', False)
+    if single_provider and 'reviewPolicy' not in config:
+        config['reviewPolicy'] = {k: [provider] for k in ('LOW', 'MEDIUM', 'HIGH')}
     policy = config.get('reviewPolicy', DEFAULT_POLICY)
     if not isinstance(policy, dict) or set(policy) != set(DEFAULT_POLICY):
         raise ValueError('reviewPolicy must specify LOW, MEDIUM and HIGH')
     unreviewed_low = config.get('allowUnreviewedLowRisk', False)
     for risk, reviewers in policy.items():
-        minimum = {'LOW': 0 if unreviewed_low else 1, 'MEDIUM': 1, 'HIGH': 2}[risk]
-        if (not isinstance(reviewers, list) or any(x not in PROVIDERS or x == provider for x in reviewers)
-                or len(set(reviewers)) != len(reviewers) or len(reviewers) < minimum):
+        minimum = {'LOW': 0 if unreviewed_low else (1 if single_provider else 1),
+                   'MEDIUM': 1,
+                   'HIGH': 1 if single_provider else 2}[risk]
+        if (not isinstance(reviewers, list)
+                or len(set(reviewers)) != len(reviewers)
+                or len(reviewers) < minimum):
             if risk == 'LOW' and isinstance(reviewers, list) and not reviewers:
                 raise ValueError('LOW needs one independent reviewer; set allowUnreviewedLowRisk '
                                  'to true to accept unreviewed low-risk runs')
+            if single_provider:
+                raise ValueError(f'{risk} needs at least {minimum} reviewer(s)')
             raise ValueError(f'{risk} needs {minimum} distinct reviewers independent of primaryProvider')
+        if not single_provider:
+            if any(x not in PROVIDERS or x == provider for x in reviewers):
+                raise ValueError(f'{risk} needs {minimum} distinct reviewers independent of primaryProvider')
+        else:
+            if any(x not in PROVIDERS for x in reviewers):
+                raise ValueError(f'Reviewers must be from {", ".join(PROVIDERS)}')
     _validate_role_providers(config, policy)
     for key, default in [('agentTimeoutSeconds', 3600), ('runTimeoutSeconds', 14400), ('maxReviewRounds', 2)]:
         value = config.get(key, default)

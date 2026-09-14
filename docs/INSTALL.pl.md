@@ -11,6 +11,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@<sprawdzony
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.5.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.6.0"
 ai-team --version
 ```
 

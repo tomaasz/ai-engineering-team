@@ -102,7 +102,26 @@ def test_protected_ignored_paths_must_be_glob_list():
 
 
 @pytest.mark.parametrize('key', ['reuseBranchForFollowUp', 'skipFinalVerificationAtLow',
-                                 'allowUnreviewedLowRisk'])
+                                 'allowUnreviewedLowRisk', 'singleProvider'])
 def test_new_boolean_options_reject_non_boolean(key):
     with pytest.raises(ValueError, match=key):
         validate(base(**{key: 'yes'}), HERE)
+
+
+def test_single_provider_allows_primary_as_reviewer():
+    policy = {'LOW': ['agy'], 'MEDIUM': ['agy'], 'HIGH': ['agy']}
+    cfg = validate(base(singleProvider=True, reviewPolicy=policy), HERE)
+    assert cfg['singleProvider'] is True
+    assert cfg['reviewPolicy']['HIGH'] == ['agy']
+
+
+def test_single_provider_defaults_review_policy_to_primary():
+    cfg = validate({'primaryProvider': 'agy', 'singleProvider': True,
+                    'verification': {'commands': [], 'noChecksReason': 'docs'}}, HERE)
+    assert cfg['reviewPolicy'] == {'LOW': ['agy'], 'MEDIUM': ['agy'], 'HIGH': ['agy']}
+
+
+def test_single_provider_false_rejects_primary_as_reviewer():
+    policy = {'LOW': ['agy'], 'MEDIUM': ['agy'], 'HIGH': ['agy']}
+    with pytest.raises(ValueError, match='independent of primaryProvider'):
+        validate(base(singleProvider=False, reviewPolicy=policy), HERE)
