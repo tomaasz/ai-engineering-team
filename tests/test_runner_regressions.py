@@ -222,3 +222,54 @@ def test_doctor_rejects_unconfigured_checks(project, monkeypatch):
     configure(project, verification={'commands': [], 'noChecksReason': ''})
     monkeypatch.setattr(runner, 'which', lambda x: x)
     assert runner.doctor(project) == 1
+
+
+def test_extract_json_handles_preambles_fences_and_postambles():
+    # Direct JSON
+    d1 = runner._extract_json('{"verdict": "PASS", "unresolved": [], "summary": "All good"}')
+    assert d1['verdict'] == 'PASS'
+
+    # Markdown fence
+    d2 = runner._extract_json('```json\n{"verdict": "PASS", "unresolved": [], "summary": "Fenced"}\n```')
+    assert d2['summary'] == 'Fenced'
+
+    # Conversational preamble (exact bug report regression)
+    raw = (
+        'Confirmed: `HEAD` equals the base commit, the working tree is clean with no untracked files, '
+        'the recorded patch is empty, and the required deliverable does not exist anywhere in the repo.\n\n'
+        '{"verdict": "CHANGES_REQUIRED", "unresolved": ["Deliverable docs/STATUS.md missing"], "summary": "Missing deliverable"}'
+    )
+    d3 = runner._result(raw, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'})
+    assert d3['verdict'] == 'CHANGES_REQUIRED'
+    assert 'Deliverable docs/STATUS.md missing' in d3['unresolved']
+
+    # Pre-text with braces and postamble
+    with_braces = (
+        'Note {important context}: checked {status.md}.\n\n'
+        '{"verdict": "PASS", "unresolved": [], "summary": "Braced notes"}\n\n'
+        'Let me know if further review is needed.'
+    )
+    d4 = runner._result(with_braces, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'})
+    assert d4['verdict'] == 'PASS'
+    assert d4['summary'] == 'Braced notes'
+
+
+def test_claude_permission_mode_headless():
+    # Read-only stages use plan mode
+    ro_cmd = runner._command({}, 'claude', 'task', 'reviewer', readonly=True)
+    assert '--permission-mode' in ro_cmd
+    assert ro_cmd[ro_cmd.index('--permission-mode') + 1] == 'plan'
+
+    # Modifying stages use acceptEdits mode for non-interactive execution
+    rw_cmd = runner._command({}, 'claude', 'task', 'orchestrator', readonly=False)
+    assert '--permission-mode' in rw_cmd
+    assert rw_cmd[rw_cmd.index('--permission-mode') + 1] == 'acceptEdits'
+
+    # fullAuto adds --dangerously-skip-permissions for modifying stages
+    fa_cmd = runner._command({'antigravity': {'fullAuto': True}}, 'claude', 'task', 'orchestrator', readonly=False)
+    assert '--dangerously-skip-permissions' in fa_cmd
+
+    # fullAuto does NOT bypass read-only restriction
+    fa_ro_cmd = runner._command({'antigravity': {'fullAuto': True}}, 'claude', 'task', 'reviewer', readonly=True)
+    assert '--dangerously-skip-permissions' not in fa_ro_cmd
+    assert fa_ro_cmd[fa_ro_cmd.index('--permission-mode') + 1] == 'plan'

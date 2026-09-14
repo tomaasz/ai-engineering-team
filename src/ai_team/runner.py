@@ -72,6 +72,7 @@ def _capture(cmd, cwd, out, err, allow_failure=False, timeout=None):
     try:
         with partial.open('w', encoding='utf-8') as fo, err.open('w', encoding='utf-8') as fe:
             process = subprocess.Popen(cmd, cwd=str(cwd), text=True, stdout=fo, stderr=fe,
+                                       stdin=subprocess.DEVNULL,
                                        env=_sanitized_env(),
                                        start_new_session=(sys.platform != 'win32'),
                                        creationflags=_NEW_GROUP)
@@ -173,8 +174,11 @@ def _command(config, provider, prompt, role, readonly=False, output=None):
             cmd += ['--output-last-message', str(output)]
         cmd += [prompt]
     else:
-        cmd = ['claude', '-p', prompt, '--permission-mode', 'plan' if readonly else 'default',
+        perm = 'plan' if readonly else 'acceptEdits'
+        cmd = ['claude', '-p', prompt, '--permission-mode', perm,
                '--output-format', 'text', '--max-turns', '30']
+        if not readonly and (config.get('antigravity', {}).get('fullAuto', False) or config.get('fullAuto', False)):
+            cmd.append('--dangerously-skip-permissions')
     model = _model(config, provider, role)
     if model:
         cmd += ['--model', model]
@@ -298,13 +302,80 @@ def _ask(config, project, rd, provider, prompt, role, filename, readonly=False):
     return _read(out)
 
 
+def _extract_json(text):
+    """Extract a JSON object from text, handling markdown fences, preambles, and postambles."""
+    if not isinstance(text, str):
+        raise TypeError('Expected string input')
+    stripped = text.strip()
+    if not stripped:
+        raise ValueError('Empty output')
+
+    try:
+        data = json.loads(stripped)
+        if isinstance(data, dict):
+            return data
+    except (ValueError, TypeError):
+        pass
+
+    fence_pattern = re.compile(r'```(?:json)?\s*(\{.*?\})\s*```', re.DOTALL)
+    for match in fence_pattern.findall(stripped):
+        try:
+            data = json.loads(match)
+            if isinstance(data, dict):
+                return data
+        except (ValueError, TypeError):
+            continue
+
+    first_brace = stripped.find('{')
+    last_brace = stripped.rfind('}')
+    if first_brace != -1 and last_brace > first_brace:
+        try:
+            data = json.loads(stripped[first_brace:last_brace + 1])
+            if isinstance(data, dict):
+                return data
+        except (ValueError, TypeError):
+            pass
+
+    for i, char in enumerate(stripped):
+        if char == '{':
+            depth = 0
+            in_string = False
+            escape = False
+            for j in range(i, len(stripped)):
+                c = stripped[j]
+                if in_string:
+                    if escape:
+                        escape = False
+                    elif c == '\\':
+                        escape = True
+                    elif c == '"':
+                        in_string = False
+                else:
+                    if c == '"':
+                        in_string = True
+                    elif c == '{':
+                        depth += 1
+                    elif c == '}':
+                        depth -= 1
+                        if depth == 0:
+                            sub = stripped[i:j + 1]
+                            try:
+                                data = json.loads(sub)
+                                if isinstance(data, dict):
+                                    return data
+                            except (ValueError, TypeError):
+                                pass
+                            break
+    raise ValueError('No valid JSON object found in text')
+
+
 def _result(text, key, allowed, provider=None, source=None):
     """Errors must name who answered and where the raw output is; the user has to act on it."""
     origin = f' from {provider}' if provider else ''
     where = f'. Raw output: {source}' if source else ''
     excerpt = f' Got: {text.strip()[:200]!r}' if text and text.strip() else ''
     try:
-        data = json.loads(text)
+        data = _extract_json(text)
     except (ValueError, TypeError) as exc:
         raise RuntimeError(f'Expected a JSON object with {key}{origin}{where}.{excerpt}') from exc
     if not isinstance(data, dict) or not isinstance(data.get(key), str) or data[key] not in allowed:

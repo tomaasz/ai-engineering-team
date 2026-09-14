@@ -9,6 +9,19 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.8.1] - 2026-09-15
+
+### Fixed
+- **Niezawodna ekstrakcja odpowiedzi JSON (`_extract_json`)**:
+  - Rozwiązano problem, w którym werdykty recenzentów i etapów triage opatrzone komentarzem wstępnym (np. `Confirmed: HEAD equals base commit... {"verdict": ...}`), blokami markdown (```` ```json ... ``` ````) lub dopiskami końcowymi powodowały błąd parsowania `json.loads` (`Expected a JSON object with verdict...`).
+  - Wprowadzono 4-stopniowy mechanizm wyodrębniania JSON: szybką ścieżkę bezpośrednią, parsowanie bloków markdown, wyszukiwanie skrajnych klamer oraz skaner zrównoważonej głębokości nawiasów.
+- **Uprawnienia Claude w trybie wsadowym/headless (`acceptEdits`)**:
+  - Poprawiono wywołanie providera Claude w etapach modyfikujących (orchestrator / integrator). Zastąpiono `--permission-mode default` (który oczekiwał interaktywnego potwierdzenia na stdin i blokował wykonanie headless) trybem `--permission-mode acceptEdits`, umożliwiając Claude zapisywanie plików deliverable i realizację zmian w repozytorium bez zawieszania.
+  - Etapy tylko do odczytu (reviewer / verifier / triage) niezmiennie wymuszają `--permission-mode plan`.
+  - Przekazywanie `--dangerously-skip-permissions` do Claude w przypadku włączenia `fullAuto: true`.
+- **Odłączenie stdin w podprocesach (`stdin=DEVNULL`)**:
+  - Przekierowano stdin uruchamianych procesów CLI do `subprocess.DEVNULL`, eliminując 3-sekundowe oczekiwanie i ostrzeżenie Claude (`no stdin data received in 3s`) oraz eliminując ryzyko zablokowania w potokach CI/CD i terminalach.
+
 ## [4.8.0] - 2026-09-14
 
 ### Added

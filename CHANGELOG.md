@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.8.1] - 2026-09-15
+
+### Fixed
+- **Resilient JSON Output Extraction (`_extract_json`)**:
+  - Fixed an issue where reviewer verdicts and triage responses wrapped in conversational preambles (e.g. `Confirmed: HEAD equals base commit... {"verdict": ...}`), markdown code fences (```` ```json ... ``` ````), or trailing commentary caused strict `json.loads` parsing failures (`Expected a JSON object with verdict...`).
+  - Added robust 4-stage JSON extraction: fast-path direct parsing, markdown code fence extraction, outermost brace pair detection, and balanced brace depth scanner.
+- **Claude Headless Batch Mode Permissions (`acceptEdits`)**:
+  - Fixed Claude provider invocation in modifying stages (orchestrator / integrator). Changed `--permission-mode default` (which prompts interactively on stdin and blocks headless execution) to `--permission-mode acceptEdits`, enabling Claude to write deliverables and execute repository modifications without hanging.
+  - Read-only stages (reviewer / verifier / triage) continue to strictly enforce `--permission-mode plan`.
+  - Propagated `--dangerously-skip-permissions` to Claude when `fullAuto: true` is configured.
+- **Subprocess stdin Disconnection (`stdin=DEVNULL`)**:
+  - Redirected spawned agent subprocess stdin to `subprocess.DEVNULL`, eliminating Claude's 3-second stdin timeout warning (`no stdin data received in 3s`) and avoiding hangs in headless CI/CD and terminal execution.
+
 ## [4.8.0] - 2026-09-14
 
 ### Added
