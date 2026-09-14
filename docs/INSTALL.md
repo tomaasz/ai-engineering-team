@@ -7,7 +7,7 @@
 Install Python 3.10+, Git, and `pipx`, then install the verified release:
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.0.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 ai-team --version
 ```
 

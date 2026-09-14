@@ -120,7 +120,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 ### Installing a Specific Version
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.1.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 ```
 
 ### Upgrading
