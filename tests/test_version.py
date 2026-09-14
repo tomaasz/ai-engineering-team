@@ -32,7 +32,11 @@ def test_version_consistency():
 
     pkg_version = ai_team.__version__
 
-    assert version_file == "4.0.0"
-    assert pyproject_version == "4.0.0"
-    assert pkg_version == "4.0.0"
-    assert INSTALLER_VERSION == "4.0.0"
+    assert version_file == "4.1.0"
+    assert pyproject_version == "4.1.0"
+    assert pkg_version == "4.1.0"
+    assert INSTALLER_VERSION == "4.1.0"
+    assert version_file == "4.1.0"
+    assert pyproject_version == "4.1.0"
+    assert pkg_version == "4.1.0"
+    assert INSTALLER_VERSION == "4.1.0"

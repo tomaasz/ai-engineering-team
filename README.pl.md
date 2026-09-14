@@ -83,6 +83,10 @@ Różne architektury modeli posiadają odmienne ograniczenia, specyfikę danych 
 ## Funkcje (Features)
 
 - **Specjalizacja ról**: Dedykowane persony agentów dla architektury, researchu, implementacji, testów, integracji i końcowej weryfikacji.
+- **Izolacja Git Worktree**: Wykonywanie zadań w odizolowanym drzewie roboczym (`--worktree`) bez przełączania gałęzi użytkownika i bez przerywania lokalnej pracy w edytorze.
+- **Interaktywne CLI recenzji**: Narzędzie `ai-team review` umożliwia podgląd werdyktów, diffa zmian (`--diff`), czyste scalenie (`--merge`) lub odrzucenie (`--discard`) gałęzi przebiegu.
+- **Mapa repozytorium AST**: Wbudowane, wolne od zewnętrznych zależności mapowanie struktury klas i funkcji repozytorium zapewnia agentom orientację w architekturze projektu bez marnowania tokenów.
+- **Żywa pamięć zespołu**: Wnioski, nierozwiązane uwagi i notatki z weryfikacji są automatycznie zapisywane w `.ai/LEARNINGS.md` i przekazywane do kolejnych przebiegów.
 - **Deterministyczne śledzenie stanu**: Sumy SHA-256 w `.ai-team/state.json`. Aktualizacje nigdy nie nadpisują zmodyfikowanych lokalnie plików — konflikty trafiają do `.ai-team/conflicts/`.
 - **Zachowanie kontekstu projektu**: Pliki `PROJECT_CONTEXT.md`, `ai-team.config.json` oraz `.agents/skills/project/` są chronione i nienaruszane podczas aktualizacji.
 - **Pełne wsparcie wieloplatformowe**: Natywna obsługa Windows 11 (PowerShell) i Linux (bash/zsh), w tym wsparcie dla VS Code Remote SSH.
@@ -116,8 +120,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 ### Instalacja konkretnej wersji
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v3.0.1"
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.0.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.1.0"
 ```
 
 ### Aktualizacja
@@ -163,16 +166,17 @@ pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
    ai-team doctor .
    ```
 
-4. Uruchom zadanie:
+4. Uruchom zadanie (opcjonalnie w odizolowanym worktree):
    ```bash
-   ai-team run . "Dodaj eksport do pliku CSV wraz z pełnym zestawem testów"
+   ai-team run . "Dodaj eksport do pliku CSV wraz z pełnym zestawem testów" --worktree
    ```
 
-5. Przejrzyj utworzony branch i raport z weryfikacji:
+5. Przejrzyj przebieg i scal lub odrzuć:
    ```bash
-   git status
-   git diff main
-   cat .ai/runs/<run-id>/final-verification.md
+   ai-team review            # Podsumowanie werdyktów i kontroli
+   ai-team review --diff     # Podgląd pełnego patcha
+   ai-team review --merge    # Scalenie gałęzi do bieżącej gałęzi
+   ai-team review --discard  # Usunięcie gałęzi przebiegu
    ```
 
 ---

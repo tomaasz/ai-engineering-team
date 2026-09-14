@@ -82,6 +82,7 @@ Checks run after model verification. Nonzero exit or failed `git diff --check` p
 - `maxReviewRounds`: integer from 1 through 5. Exhausting it ends the run as `CHANGES_REQUIRED` (exit code 2), not as a crash; the work stays on the branch. Continue with `ai-team resume <run-id> --extra-rounds N`, which discards the last round's cached verdicts and runs it again.
 - `requireCleanWorkingTree`: when true, blocks a run with tracked or untracked changes.
 - `createBranchForEachRun`: creates a unique `branchPrefix + run-id` branch.
+- `useWorktree`: when true, executes runs in an isolated git worktree (`.ai/worktrees/<run_id>`) without switching branches in the main working tree.
 - `reuseBranchForFollowUp`: when true and the current branch already starts with `branchPrefix`, continue on it instead of creating another branch. Useful for iterating on one change; leave it off when each run should stay isolated.
 - `skipFinalVerificationAtLow`: when true (default) and the risk is `LOW` and an independent reviewer already returned a verdict, the primary's own final verification is skipped. Configured checks and `git diff --check` still run. This keeps a trivial change at three model invocations while replacing a self-assessment with an independent one.
 - `branchPrefix`: must begin with `ai/` and cannot contain `..`.

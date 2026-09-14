@@ -83,6 +83,7 @@ Kontrole uruchamiają się po weryfikacji przez model. Niezerowy kod wyjścia al
 - `maxReviewRounds`: liczba całkowita od 1 do 5. Wyczerpanie kończy przebieg jako `CHANGES_REQUIRED` (kod 2), a nie awarią; praca zostaje na branchu. Kontynuuj przez `ai-team resume <run-id> --extra-rounds N`, co odrzuca zapisane werdykty ostatniej rundy i uruchamia ją ponownie.
 - `requireCleanWorkingTree`: gdy `true`, blokuje przebieg przy zmianach śledzonych lub nieśledzonych.
 - `createBranchForEachRun`: tworzy unikalny branch `branchPrefix + run-id`.
+- `useWorktree`: gdy `true`, wykonuje przebiegi w odizolowanym git worktree (`.ai/worktrees/<run_id>`) bez przełączania gałęzi w głównym katalogu roboczym.
 - `reuseBranchForFollowUp`: gdy `true`, a bieżący branch zaczyna się od `branchPrefix`, kontynuuje na nim zamiast tworzyć kolejny. Przydatne przy iterowaniu nad jedną zmianą; zostaw wyłączone, gdy każdy przebieg ma być izolowany.
 - `skipFinalVerificationAtLow`: gdy `true` (domyślnie), ryzyko to `LOW`, a niezależny recenzent już wydał werdykt, własna weryfikacja końcowa głównego dostawcy jest pomijana. Skonfigurowane kontrole i `git diff --check` nadal się wykonują. Utrzymuje to trywialną zmianę na trzech wywołaniach modelu, zastępując samoocenę oceną niezależną.
 - `branchPrefix`: musi zaczynać się od `ai/` i nie może zawierać `..`.

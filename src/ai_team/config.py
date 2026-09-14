@@ -9,7 +9,8 @@ ROLES = ('triage', 'orchestrator', 'reviewer', 'integrator', 'verifier')
 EFFORTS = ('low', 'medium', 'high')
 DEFAULT_POLICY = {'LOW': ['codex'], 'MEDIUM': ['codex'], 'HIGH': ['claude', 'codex']}
 BOOLEAN_KEYS = ('requireCleanWorkingTree', 'createBranchForEachRun', 'availabilityFallback',
-                'reuseBranchForFollowUp', 'skipFinalVerificationAtLow', 'allowUnreviewedLowRisk')
+                'reuseBranchForFollowUp', 'skipFinalVerificationAtLow', 'allowUnreviewedLowRisk',
+                'useWorktree')
 # Keys the runner actually reads. Anything else is drift and must fail loudly.
 ANTIGRAVITY_KEYS = {'model', 'sandbox', 'fullAuto', 'printTimeout',
                     'triageEffort', 'implementationEffort', 'verificationEffort'}

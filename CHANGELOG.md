@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.0] - 2026-09-14
+
+Autonomous workflow and review improvements inspired by modern agentic architectures (Git worktrees, living memory, AST repository mapping, and dedicated review inspection).
+
+### Added
+- **Git Worktree Isolation (`--worktree`)**: Execute multi-agent runs inside `.ai/worktrees/<run_id>` without switching the user's active branch or disrupting local editing. Changes are preserved and cleanly committed to `ai/<run_id>` upon completion. Can also be enabled project-wide via `"useWorktree": true` in `ai-team.config.json`.
+- **Run Review CLI (`ai-team review`)**: Inspect run statuses, risk verdicts, reviewer notes, and checks. Supports `--diff` (view full patch vs base), `--merge` (clean non-fast-forward merge into active branch), and `--discard` (prune and delete run branch).
+- **AST Codebase Map (`src/ai_team/repomap.py`)**: Zero-dependency structural symbol map (classes, methods, functions) automatically injected into triage and orchestrator/architect prompts for accurate codebase navigation with minimal token footprint.
+- **Dynamic Team Memory (`.ai/LEARNINGS.md`)**: Automatically logs reviewer findings, unresolved issues, and verification notes after each run, and injects recent learnings into subsequent runs to prevent repeated mistakes.
+
 ## [4.0.0] - 2026-09-12
 
 Implementation of conclusions from the framework audit. Several default settings have changed so that they reject previously valid configurations — see Migration.

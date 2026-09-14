@@ -83,6 +83,10 @@ Different model architectures have distinct training biases, limitations, and bl
 ## Features
 
 - **Role specialization**: Dedicated agent personas for architecture, research, implementation, testing, integration, and final verification.
+- **Git Worktree Isolation**: Run agent teams in isolated worktrees (`--worktree`) without switching your active branch or interrupting ongoing local edits.
+- **Interactive Review CLI**: `ai-team review` allows inspecting verdicts, viewing diffs (`--diff`), cleanly merging (`--merge`), or discarding (`--discard`) run branches.
+- **AST Codebase Map**: Fast zero-dependency symbol mapping of classes and functions keeps model prompts context-aware without token bloat.
+- **Dynamic Team Memory**: Review findings and lessons are automatically preserved in `.ai/LEARNINGS.md` and fed into future runs.
 - **Deterministic state tracking**: SHA-256 checksums in `.ai-team/state.json`. Updates never overwrite locally modified files — conflicts are moved to `.ai-team/conflicts/`.
 - **Project context preservation**: `PROJECT_CONTEXT.md`, `ai-team.config.json`, and `.agents/skills/project/` are protected and preserved during updates.
 - **Full cross-platform support**: Native support for Windows 11 (PowerShell) and Linux (bash/zsh), including VS Code Remote SSH.
@@ -116,7 +120,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 ### Installing a Specific Version
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.0.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.1.0"
 ```
 
 ### Upgrading
@@ -162,16 +166,17 @@ pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
    ai-team doctor .
    ```
 
-4. Run a task:
+4. Run a task (optionally in an isolated worktree):
    ```bash
-   ai-team run . "Add CSV export feature with full test coverage"
+   ai-team run . "Add CSV export feature with full test coverage" --worktree
    ```
 
-5. Review the created branch and verification report:
+5. Review the run and merge or discard:
    ```bash
-   git status
-   git diff main
-   cat .ai/runs/<run-id>/final-verification.md
+   ai-team review            # View summary of verdicts and checks
+   ai-team review --diff     # View complete patch
+   ai-team review --merge    # Cleanly merge into current branch
+   ai-team review --discard  # Discard and delete the run branch
    ```
 
 ---

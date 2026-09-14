@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import uuid
 
 from .utils import run, which, load_json, save_json, ensure_git_repo, safe_slug, sha256_file, project_path
 from .config import load_config, DEFAULT_POLICY, DEFAULT_PROTECTED_IGNORED, GUARDRAIL_FILES
+from .repomap import generate_repomap
 
 _deadline = ContextVar('deadline', default=None)
 _agent_timeout = ContextVar('agent_timeout', default=3600)
@@ -191,7 +193,7 @@ def _snapshot(project):
     ignored = _git(project, 'ls-files', '-z', '--others', '--ignored', '--exclude-standard').stdout.split('\0')
     result = {}
     for name in list(tracked) + [x for x in ignored if x and _protected(x)]:
-        if not name or name.startswith('.ai/runs/') or name == '.ai/latest.txt':
+        if not name or name.startswith('.ai/runs/') or name.startswith('.ai/worktrees/') or name == '.ai/latest.txt' or name == '.ai/LEARNINGS.md':
             continue
         path = project_path(project, name)
         result[name] = sha256_file(path) if path.is_file() else None
@@ -214,11 +216,63 @@ def _skill_context(project, header='\n\nPROJECT SKILLS - apply these criteria:\n
     return header + text
 
 
+def _repomap_context(project, header='\n\nCODEBASE MAP (AST):\n'):
+    """Inject concise AST summary of repository definitions into planning stages."""
+    try:
+        repomap = generate_repomap(project)
+        if repomap and len(repomap) <= 25000:
+            return header + repomap + '\n'
+    except Exception:
+        pass
+    return ''
+
+
+def _learnings_context(project, header='\n\nTEAM MEMORY & PAST LEARNINGS (avoid repeating these mistakes):\n'):
+    """Inject accumulated review findings and lessons into stage prompts."""
+    learnings_file = project_path(project, '.ai/LEARNINGS.md')
+    if learnings_file.is_file():
+        content = _read(learnings_file).strip()
+        if content:
+            lines = content.splitlines()
+            if len(lines) > 50:
+                content = '\n'.join(lines[-50:])
+            return header + content + '\n'
+    return ''
+
+
+def _record_learnings(project, run_id, report):
+    """Capture review findings and notes into .ai/LEARNINGS.md so future runs learn from them."""
+    items = []
+    for rev in report.get('reviews', []):
+        for unf in rev.get('unresolved', []):
+            if isinstance(unf, str) and unf.strip():
+                items.append(f"- [{rev.get('provider', 'reviewer')}] {unf.strip()}")
+            elif isinstance(unf, dict):
+                msg = unf.get('finding') or unf.get('message') or unf.get('description') or str(unf)
+                items.append(f"- [{rev.get('provider', 'reviewer')}] {msg}")
+    if report.get('verification', {}).get('summary'):
+        summary = report['verification']['summary']
+        verdict = report['verification'].get('verdict', '')
+        if verdict == 'PASS_WITH_NOTES':
+            items.append(f"- [verification-notes] {summary}")
+    if not items:
+        return
+    learnings_file = project_path(project, '.ai/LEARNINGS.md')
+    learnings_file.parent.mkdir(parents=True, exist_ok=True)
+    existing = _read(learnings_file) if learnings_file.exists() else '# AI Engineering Team - Learnings\n\n'
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    new_entry = f"\n### Run `{run_id}` ({timestamp})\n" + '\n'.join(items) + '\n'
+    learnings_file.write_text(existing + new_entry, encoding='utf-8')
+
+
 def _ask(config, project, rd, provider, prompt, role, filename, readonly=False):
     out, done = rd / filename, rd / (filename + '.done')
     if out.exists() and done.exists():
         # Resuming a run: a completed stage is cached; a partial one is re-run.
         return _read(out)
+    prompt += _learnings_context(project, _text(config, 'learnings'))
+    if role in ('triage', 'orchestrator'):
+        prompt += _repomap_context(project, _text(config, 'repomap'))
     if readonly:
         prompt += _skill_context(project, _text(config, 'skills'))
     before = _snapshot(project) if readonly else None
@@ -270,7 +324,7 @@ BUILTIN_RISK_GLOBS = {'HIGH': [
 # A filename never proves intent; escalate on what the change actually does.
 RISKY_CONTENT = re.compile(
     r'(DROP\s+(TABLE|DATABASE|SCHEMA)|TRUNCATE\s+TABLE|DELETE\s+FROM|ALTER\s+TABLE|GRANT\s+ALL'
-    r'|os\.system\(|shell\s*=\s*True|pickle\.loads?\(|yaml\.load\(|(^|[^\w.])eval\('
+    r'|os\.system\(|shell\s*=\s*True|pickle\.loads?\(|yaml\.load\|((^|[^\w.])eval\()'
     r'|verify\s*=\s*False|check_hostname\s*=\s*False|rejectUnauthorized\s*:\s*false'
     r'|BEGIN [A-Z ]*PRIVATE KEY)', re.I | re.M)
 
@@ -396,6 +450,8 @@ PROMPTS = {
         'role': ('Read AI_TEAM.md and PROJECT_CONTEXT.md and relevant project skills. '
                  'Your role is {role}. Do not push, merge or deploy.\n'),
         'skills': '\n\nPROJECT SKILLS - apply these criteria:\n',
+        'repomap': '\n\nCODEBASE MAP (AST):\n',
+        'learnings': '\n\nTEAM MEMORY & PAST LEARNINGS (avoid repeating these mistakes):\n',
         'triage': 'Analyze risk without edits. Return ONLY JSON: {"risk":"LOW|MEDIUM|HIGH"}.',
         'implement': ('Implement and test. For LOW use a minimal workflow; delegate only when '
                       'complexity warrants it. External reviews are handled by the dispatcher.'),
@@ -411,6 +467,8 @@ PROMPTS = {
         'role': ('Przeczytaj AI_TEAM.md i PROJECT_CONTEXT.md oraz odpowiednie skille projektu. '
                  'Twoja rola to {role}. Nie wykonuj push, merge ani deploy.\n'),
         'skills': '\n\nSKILLE PROJEKTU - stosuj te kryteria:\n',
+        'repomap': '\n\nMAPA KODU (AST):\n',
+        'learnings': '\n\nBIEŻĄCA PAMIĘĆ ZESPOŁU I POPRZEDNIE WNIOSKI (unikaj powtarzania tych błędów):\n',
         'triage': 'Oceń ryzyko bez edycji. Zwróć WYŁĄCZNIE JSON: {"risk":"LOW|MEDIUM|HIGH"}.',
         'implement': ('Zaimplementuj i przetestuj. Dla LOW użyj minimalnego przebiegu; deleguj tylko '
                       'gdy uzasadnia to złożoność. Recenzje zewnętrzne obsługuje dispatcher.'),
@@ -452,7 +510,7 @@ def _write_diff(project, base, rd):
     return patch
 
 
-def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, verification):
+def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, verification, main_repo=None):
     report = {'runId': run_id, 'base': base, 'branch': branch, 'status': 'RUNNING', 'reviews': [], 'checks': []}
     config_file = project / 'ai-team.config.json'
     config_hash = sha256_file(config_file) if config_file.is_file() else None
@@ -554,14 +612,20 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
         save_json(rd / 'result.json', report)
         for var, token in limits:
             var.reset(token)
+        try:
+            _record_learnings(main_repo or project, run_id, report)
+        except Exception:
+            pass
         print(f"Run: {run_id}\nBranch: {branch}\nStatus: {report['status']}\nReports: {rd}")
         if report.get('note'):
             print(report['note'])
 
 
-def run_team(project, user_prompt):
+def run_team(project, user_prompt, use_worktree=None):
     project = ensure_git_repo(project.resolve())
     config = load_config(project)
+    if use_worktree is None:
+        use_worktree = config.get('useWorktree', False)
     primary = config.get('primaryProvider', 'agy')
     if not which(primary):
         raise RuntimeError(f'Missing primary CLI: {primary}')
@@ -575,7 +639,7 @@ def run_team(project, user_prompt):
     state = load_json(project / '.ai-team/state.json')
     if state.get('conflicts'):
         raise RuntimeError('Resolve installation conflicts before running')
-    if config.get('requireCleanWorkingTree', True) and _git(project, 'status', '--porcelain').stdout.strip():
+    if not use_worktree and config.get('requireCleanWorkingTree', True) and _git(project, 'status', '--porcelain').stdout.strip():
         raise RuntimeError('Working tree is not clean. Review and commit/stash your changes.')
     verification = config.get('verification', {})
     if not verification.get('commands') and not verification.get('noChecksReason', '').strip():
@@ -589,15 +653,37 @@ def run_team(project, user_prompt):
     rd.mkdir(parents=True, exist_ok=False)
     (rd / 'prompt.txt').write_text(user_prompt, encoding='utf-8')
     project_path(project, '.ai/latest.txt').write_text(run_id, encoding='utf-8')
-    branch = current
     prefix = config.get('branchPrefix', 'ai/')
-    reuse = config.get('reuseBranchForFollowUp', False) and current.startswith(prefix)
-    if config.get('createBranchForEachRun', True) and not reuse:
-        branch = prefix + run_id
-        _git(project, 'switch', '-c', branch)
-    (rd / 'base-ref.txt').write_text(base, encoding='utf-8')
-    (rd / 'branch.txt').write_text(branch, encoding='utf-8')
-    return _execute(project, config, rd, run_id, base, branch, user_prompt, primary, verification)
+    branch = prefix + run_id
+
+    if use_worktree:
+        worktree_dir = project_path(project, f'.ai/worktrees/{run_id}')
+        worktree_dir.parent.mkdir(parents=True, exist_ok=True)
+        _git(project, 'worktree', 'add', '-b', branch, str(worktree_dir), base)
+        (rd / 'base-ref.txt').write_text(base, encoding='utf-8')
+        (rd / 'branch.txt').write_text(branch, encoding='utf-8')
+        (rd / 'worktree.txt').write_text(str(worktree_dir), encoding='utf-8')
+        try:
+            if (project / '.ai-team').is_dir() and not (worktree_dir / '.ai-team').exists():
+                shutil.copytree(project / '.ai-team', worktree_dir / '.ai-team')
+            return _execute(worktree_dir, config, rd, run_id, base, branch, user_prompt, primary, verification, main_repo=project)
+        finally:
+            status_out = _git(worktree_dir, 'status', '--porcelain', check=False).stdout.strip()
+            if status_out:
+                _git(worktree_dir, 'add', '-A', check=False)
+                _git(worktree_dir, 'commit', '-m', f"ai({run_id}): {user_prompt[:72]}", check=False)
+            _git(project, 'worktree', 'remove', '--force', str(worktree_dir), check=False)
+            if worktree_dir.exists():
+                shutil.rmtree(worktree_dir, ignore_errors=True)
+    else:
+        branch = current
+        reuse = config.get('reuseBranchForFollowUp', False) and current.startswith(prefix)
+        if config.get('createBranchForEachRun', True) and not reuse:
+            branch = prefix + run_id
+            _git(project, 'switch', '-c', branch)
+        (rd / 'base-ref.txt').write_text(base, encoding='utf-8')
+        (rd / 'branch.txt').write_text(branch, encoding='utf-8')
+        return _execute(project, config, rd, run_id, base, branch, user_prompt, primary, verification, main_repo=project)
 
 
 def runs(project):
@@ -636,6 +722,145 @@ def runs(project):
     return 0
 
 
+def review_run(project, run_id=None, action=None):
+    """Inspect, diff, merge, or discard a run."""
+    # If run_id looks like a path or repo directory, redirect to project
+    if run_id in ('.', './', '.\\') or (isinstance(run_id, str) and Path(run_id).is_dir() and (Path(run_id) / '.git').exists()):
+        project = Path(run_id)
+        run_id = 'latest'
+
+    project = ensure_git_repo(project.resolve())
+    runs_dir = project_path(project, '.ai/runs')
+    if not runs_dir.is_dir():
+        print('No runs recorded')
+        return 1
+
+    if not run_id or run_id == 'latest':
+        marker = project_path(project, '.ai/latest.txt')
+        if not marker.exists():
+            print('No latest run recorded')
+            return 1
+        run_id = _read(marker).strip()
+
+    rd = runs_dir / run_id
+    if not rd.is_dir():
+        matches = [d for d in runs_dir.iterdir() if d.is_dir() and d.name.startswith(run_id)]
+        if len(matches) == 1:
+            rd = matches[0]
+            run_id = rd.name
+        else:
+            print(f'Run not found: {run_id}')
+            return 1
+
+    result_file = rd / 'result.json'
+    result = load_json(result_file) if result_file.exists() else {}
+    branch = _read(rd / 'branch.txt').strip() or result.get('branch', '')
+    base = _read(rd / 'base-ref.txt').strip() or result.get('base', '')
+    current = _git(project, 'branch', '--show-current').stdout.strip()
+    prompt = _read(rd / 'prompt.txt').strip()
+
+    if action == 'diff':
+        if branch and _git(project, 'rev-parse', '--verify', branch, check=False).returncode == 0:
+            diff_proc = _git(project, 'diff', f'{base}...{branch}' if base else branch, check=False)
+            output = diff_proc.stdout
+            if not output.strip() and branch == current:
+                output = _git(project, 'diff', base, check=False).stdout
+            if output.strip():
+                print(output)
+                return 0
+        patch_file = rd / 'diff.patch'
+        if patch_file.exists():
+            print(_read(patch_file))
+            return 0
+        print(f'No diff available for run {run_id}')
+        return 0
+
+    if action == 'merge':
+        if not branch:
+            print(f'Run {run_id} has no associated branch')
+            return 1
+        if _git(project, 'rev-parse', '--verify', branch, check=False).returncode != 0:
+            print(f'Branch {branch} does not exist in repository')
+            return 1
+        if current == branch:
+            print(f'Already on branch {branch}')
+            return 0
+        if _git(project, 'status', '--porcelain').stdout.strip():
+            print('Cannot merge: working tree has uncommitted changes. Stash or commit first.')
+            return 1
+        print(f"Merging branch '{branch}' into '{current}'...")
+        proc = _git(project, 'merge', '--no-ff', '-m', f"Merge branch '{branch}' (run {run_id})", branch, check=False)
+        if proc.returncode != 0:
+            print(f"[FAIL] Merge conflict or error:\n{proc.stdout}\n{proc.stderr}")
+            return proc.returncode
+        print(f"[OK] Successfully merged {branch} into {current}")
+        return 0
+
+    if action == 'discard':
+        if not branch:
+            print(f'Run {run_id} has no associated branch')
+            return 1
+        if current == branch:
+            print(f'Cannot discard active branch {branch}. Switch to another branch first.')
+            return 1
+        if _git(project, 'rev-parse', '--verify', branch, check=False).returncode == 0:
+            _git(project, 'branch', '-D', branch)
+            print(f"[OK] Discarded and deleted branch {branch}")
+        else:
+            print(f'Branch {branch} not found or already deleted')
+        return 0
+
+    # Default action: summary
+    status_val = result.get('status', 'UNKNOWN')
+    risk_val = result.get('risk', 'UNKNOWN')
+    print('=' * 60)
+    print(f'AI Engineering Team - Run Review')
+    print('=' * 60)
+    print(f'Run ID:       {run_id}')
+    print(f'Status:       {status_val}')
+    print(f'Risk:         {risk_val}')
+    print(f'Branch:       {branch or "(none)"}')
+    print(f'Base:         {base or "(none)"}')
+    if prompt:
+        print(f'Prompt:       {prompt[:120]}{"..." if len(prompt) > 120 else ""}')
+
+    reviews = result.get('reviews', [])
+    if reviews:
+        print('\nReview Verdicts:')
+        for r in reviews:
+            provider = r.get('provider', 'unknown')
+            round_no = r.get('round', 1)
+            v = r.get('verdict', 'UNKNOWN')
+            summary = r.get('summary', '')
+            print(f'  - Round {round_no} [{provider}]: {v}')
+            if summary:
+                print(f'    Summary: {summary[:100]}')
+            for unf in r.get('unresolved', []):
+                print(f'    * Unresolved: {unf}')
+
+    checks = result.get('checks', [])
+    if checks:
+        print('\nChecks:')
+        for c in checks:
+            cmd_str = ' '.join(c.get('argv', []))
+            ec = c.get('exitCode', -1)
+            icon = 'OK' if ec == 0 else 'FAIL'
+            print(f'  - [{icon}] {cmd_str} (exit {ec})')
+
+    verification = result.get('verification', {})
+    if verification:
+        print(f"\nFinal Verification: {verification.get('verdict', 'NONE')}")
+        if verification.get('summary'):
+            print(f"  Summary: {verification['summary'][:120]}")
+
+    print('\nActions:')
+    print(f'  ai-team review {run_id} --diff      # View full patch')
+    print(f'  ai-team review {run_id} --merge     # Merge branch into current branch')
+    print(f'  ai-team review {run_id} --discard   # Discard and delete branch')
+    print('=' * 60)
+    return 0
+
+
 def _reopen_last_round(rd, extra_rounds):
     """Drop the final round's cached answers so resume can actually retry it."""
     rounds = sorted({int(p.name.split('-')[1]) for p in rd.glob('review-*-*.json')
@@ -670,4 +895,4 @@ def resume_team(project, run_id, extra_rounds=0):
     if extra_rounds:
         config['maxReviewRounds'] = config.get('maxReviewRounds', 2) + extra_rounds
         _reopen_last_round(rd, extra_rounds)
-    return _execute(project, config, rd, run_id, base, branch, _read(prompt_file), primary, config.get('verification', {}))
+    return _execute(project, config, rd, run_id, base, branch, _read(prompt_file), primary, config.get('verification', {}), main_repo=project)

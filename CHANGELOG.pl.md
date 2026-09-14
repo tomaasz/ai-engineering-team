@@ -9,6 +9,16 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.1.0] - 2026-09-14
+
+Usprawnienia autonomicznego workflow i recenzji inspirowane nowoczesnymi architekturami agentowymi (izolacja git worktree, żywa pamięć zespołu, mapowanie repozytorium AST oraz dedykowane CLI do inspekcji).
+
+### Added
+- **Izolacja Git Worktree (`--worktree`)**: Wykonywanie przebiegów zespołu agentów w odizolowanym drzewie `.ai/worktrees/<run_id>` bez przełączania bieżącej gałęzi użytkownika i bez przerywania lokalnej pracy. Zmiany są czysto utrwalane w gałęzi `ai/<run_id>`. Opcję można włączyć na stałe przez `"useWorktree": true` w `ai-team.config.json`.
+- **Interaktywne CLI recenzji (`ai-team review`)**: Przegląd statusu przebiegu, ocen ryzyka, werdyktów recenzentów i wyników kontroli. Wspiera `--diff` (pełny podgląd łatki względem bazy), `--merge` (czyste scalenie gałęzi przebiegu do bieżącej gałęzi) oraz `--discard` (usunięcie gałęzi przebiegu).
+- **Mapa repozytorium AST (`src/ai_team/repomap.py`)**: Wbudowana, bez dodatkowych zależności mapa symboli (klasy, metody, funkcje) automatycznie dołączana do promptów triage i architekta/orkiestratora, zapewniająca kontekst całego projektu przy minimalnym narzucie tokenów.
+- **Dynamiczna pamięć zespołu (`.ai/LEARNINGS.md`)**: Automatyczne utrwalanie uwag recenzentów, nierozwiązanych problemów i notatek weryfikacyjnych po każdym przebiegu oraz dołączanie ostatnich wniosków do kolejnych zadań, zapobiegając powtarzaniu tych samych błędów.
+
 ## [4.0.0] - 2026-09-12
 
 Realizacja wniosków z audytu frameworka. Kilka domyślnych ustawień zmieniło się tak,
