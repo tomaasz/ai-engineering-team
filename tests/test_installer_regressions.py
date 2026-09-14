@@ -174,6 +174,19 @@ def test_resolve_clears_conflict_and_applies_requested_strategy(tmp_path, strate
         assert state["managed"]["AI_TEAM.md"] == sha256_file(target)
 
 
+def test_resolve_all_clears_all_conflicts(tmp_path):
+    _init_repo(tmp_path)
+    installer.install(tmp_path, "core")
+    (tmp_path / "AI_TEAM.md").write_text("local ai team\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("local agents\n", encoding="utf-8")
+    installer.update(tmp_path)
+    state = _state(tmp_path)
+    assert len(state["conflicts"]) >= 2
+    installer.resolve(tmp_path, "all", strategy="upstream")
+    state_after = _state(tmp_path)
+    assert len(state_after["conflicts"]) == 0
+
+
 def test_same_label_task_updates_only_when_framework_owned(tmp_path, monkeypatch):
     _init_repo(tmp_path)
     installer.install(tmp_path, "core")

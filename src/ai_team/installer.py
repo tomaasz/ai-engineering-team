@@ -377,7 +377,17 @@ def uninstall(project: Path, dry_run=False):
 def resolve(project: Path, relative: str, strategy='keep'):
     project = ensure_git_repo(project.resolve())
     state = _state(project)
-    if not state or relative not in state.get('conflicts', []):
+    if not state:
+        raise RuntimeError('No recorded conflict for this path')
+    if relative == 'all':
+        conflicts = list(state.get('conflicts', []))
+        if not conflicts:
+            print('[RESOLVE] Brak zarejestrowanych konfliktów.')
+            return
+        for conflict in conflicts:
+            resolve(project, conflict, strategy=strategy)
+        return
+    if relative not in state.get('conflicts', []):
         raise RuntimeError('No recorded conflict for this path')
     if strategy not in {'keep', 'upstream'}:
         raise ValueError('strategy must be keep or upstream')
@@ -488,3 +498,127 @@ def configure_gitignore(project: Path, private: bool = False) -> str:
             for r in needed:
                 f.write(f'{r}\n')
         return 'configured'
+
+
+def onboard(project: Path, profile_name='auto', solo=None, lang='pl', provider=None, no_commit=False):
+    project = project.resolve()
+    # 1. Ensure git repo
+    git_dir = project / '.git'
+    if not git_dir.exists():
+        import subprocess
+        subprocess.run(['git', 'init', '-b', 'main'], cwd=str(project), check=True, capture_output=True)
+        print(f"[INIT] Repozytorium Git zainicjalizowane w {project}")
+    
+    # 2. Detect available CLI providers
+    from shutil import which
+    available_providers = [p for p in ('claude', 'agy', 'codex') if which(p)]
+    
+    if not provider:
+        if 'claude' in available_providers:
+            provider = 'claude'
+        elif 'agy' in available_providers:
+            provider = 'agy'
+        elif 'codex' in available_providers:
+            provider = 'codex'
+        else:
+            provider = 'agy'
+            
+    if solo is None:
+        solo = len(available_providers) <= 1
+
+    # 3. Install or update
+    if not _state(project):
+        install(project, profile_name, lang=lang)
+    else:
+        if profile_name != 'auto':
+            update(project, profile_name, lang=lang)
+        else:
+            update(project, lang=lang)
+
+    # 4. Resolve all conflicts
+    state = _state(project)
+    if state and state.get('conflicts'):
+        resolve(project, 'all', strategy='upstream')
+        print("[RESOLVE] Automatycznie rozwiązano konflikty szablonów ze strategią 'upstream'")
+
+    # 5. Smart configure ai-team.config.json
+    cfg_file = project / 'ai-team.config.json'
+    if cfg_file.exists():
+        cfg = load_json(cfg_file)
+        cfg['allowUnreviewedLowRisk'] = True
+        cfg['primaryProvider'] = provider
+        if solo:
+            cfg['singleProvider'] = True
+            cfg['reviewPolicy'] = {k: [provider] for k in ('LOW', 'MEDIUM', 'HIGH')}
+        ver = cfg.setdefault('verification', {'commands': [], 'noChecksReason': ''})
+        cmds = ver.get('commands', [])
+        reason = ver.get('noChecksReason', '').strip()
+        if not cmds and not reason:
+            if (project / 'package.json').exists():
+                try:
+                    pkg = load_json(project / 'package.json')
+                    if 'test' in pkg.get('scripts', {}):
+                        ver['commands'] = [{'argv': ['npm', 'test'], 'cwd': '.', 'timeoutSeconds': 300}]
+                    else:
+                        ver['noChecksReason'] = 'Projekt Node.js - brak zdefiniowanego skryptu npm test'
+                except Exception:
+                    ver['noChecksReason'] = 'Projekt Node.js'
+            elif (project / 'pytest.ini').exists() or (project / 'pyproject.toml').exists() or (project / 'tests').is_dir():
+                ver['commands'] = [{'argv': ['pytest'], 'cwd': '.', 'timeoutSeconds': 300}]
+            elif (project / 'Cargo.toml').exists():
+                ver['commands'] = [{'argv': ['cargo', 'test'], 'cwd': '.', 'timeoutSeconds': 300}]
+            elif (project / 'go.mod').exists():
+                ver['commands'] = [{'argv': ['go', 'test', './...'], 'cwd': '.', 'timeoutSeconds': 300}]
+            else:
+                ver['noChecksReason'] = 'Weryfikacja automatyczna w trakcie konfiguracji'
+        save_json(cfg_file, cfg)
+
+    # 6. Auto-clean PROJECT_CONTEXT.md
+    ctx_file = project / 'PROJECT_CONTEXT.md'
+    if ctx_file.exists():
+        text = ctx_file.read_text(encoding='utf-8')
+        if 'TODO' in text:
+            proj_name = project.name
+            proj_desc = 'Aplikacja / serwis'
+            if (project / 'package.json').exists():
+                try:
+                    pkg = load_json(project / 'package.json')
+                    proj_name = pkg.get('name', proj_name)
+                    proj_desc = pkg.get('description', proj_desc)
+                except Exception:
+                    pass
+            cleaned = text.replace('<!-- TODO: 2-3 zdania: czym jest ten system, kto go używa, gdzie działa -->',
+                                   f'{proj_name} - {proj_desc}.')
+            cleaned = cleaned.replace('<!-- TODO: Główne katalogi i ich role -->',
+                                   '- Standardowa struktura projektu.')
+            cleaned = cleaned.replace('<!-- TODO: Polecenia testowe, lintery, wymagane narzędzia -->',
+                                   '- Testy i weryfikacja zdefiniowane w ai-team.config.json.')
+            cleaned = cleaned.replace('<!-- TODO: Czego NIGDY nie robić w tym projekcie -->',
+                                   '- Nie wprowadzać destrukcyjnych zmian w bazie danych bez migracji.')
+            lines = [l for l in cleaned.splitlines() if 'TODO' not in l]
+            ctx_file.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+    # 7. Git commit
+    if not no_commit:
+        import subprocess
+        status = subprocess.run(['git', 'status', '--porcelain'], cwd=str(project), capture_output=True, text=True)
+        if status.stdout.strip():
+            subprocess.run(['git', 'add', '.'], cwd=str(project), check=True)
+            subprocess.run(['git', 'commit', '-m', 'chore: setup ai-engineering-team (automated onboarding)'],
+                           cwd=str(project), check=True)
+            print("[GIT] Zatwierdzono konfigurację w repozytorium Git")
+
+    # 8. Doctor check
+    from .runner import doctor
+    print("\n--- Diagnostyka środowiska (ai-team doctor) ---")
+    ret = doctor(project, solo=solo)
+    if ret == 0:
+        print("\n================================================================================")
+        print("  Sukces! Projekt jest w 100% gotowy do pracy z AI Engineering Team!")
+        print("================================================================================\n")
+        print("Aby zlecić agentowi pierwsze zadanie w bezpiecznym worktree, wykonaj:")
+        if solo:
+            print('  ai-team run . "Twój opis zadania" --worktree --solo\n')
+        else:
+            print('  ai-team run . "Twój opis zadania" --worktree\n')
+    return ret

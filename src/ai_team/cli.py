@@ -1,6 +1,6 @@
 import argparse, sys
 from pathlib import Path
-from .installer import install, update, status, uninstall, resolve, install_workflow, configure_gitignore
+from .installer import install, update, status, uninstall, resolve, install_workflow, configure_gitignore, onboard
 from .runner import run_team, doctor, resume_team, runs, review_run
 from .skills import list_skills, suggest_skills, add_skill, remove_skill, detect_stack
 from .utils import profiles_root
@@ -41,7 +41,7 @@ def parser():
 
     x = s.add_parser('resolve')
     x.add_argument('project')
-    x.add_argument('file')
+    x.add_argument('file', help='Conflict file path (or "all" to resolve all conflicts)')
     x.add_argument('--strategy', choices=['keep', 'upstream'], required=True)
 
     for cmd_name in ('skill', 'skills'):
@@ -88,6 +88,17 @@ def parser():
     x = s.add_parser('uninstall')
     x.add_argument('project', nargs='?', default='.')
     x.add_argument('--dry-run', action='store_true')
+
+    for name in ('onboard', 'quickstart', 'setup'):
+        x = s.add_parser(name, help='Automated one-command project onboarding and setup')
+        x.add_argument('project', nargs='?', default='.')
+        x.add_argument('--profile', default='auto')
+        x.add_argument('--solo', action='store_true', default=None, help='Force solo mode (singleProvider)')
+        x.add_argument('--multi', dest='solo', action='store_false', help='Force multi-provider mode')
+        x.add_argument('--lang', choices=['en', 'pl'], default='pl')
+        x.add_argument('--provider', choices=['agy', 'claude', 'codex'], default=None)
+        x.add_argument('--no-commit', action='store_true', help='Skip automatic Git commit after setup')
+
     return p
 
 def main():
@@ -242,6 +253,9 @@ def main():
             [print(('[DRY] ' if a.dry_run else '') + '[REMOVE] ' + x) for x in rem]
             [print('[KEEP]   ' + x) for x in skip]
             return 0
+        if a.command in ('onboard', 'quickstart', 'setup'):
+            return onboard(project, profile_name=a.profile, solo=a.solo,
+                           lang=a.lang, provider=a.provider, no_commit=a.no_commit)
     except Exception as e:
         print('ERROR:', e, file=sys.stderr)
         return 1

@@ -9,7 +9,19 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [4.6.0] - 2026-09-14
+## [4.7.0] - 2026-09-14
+
+### Added
+- **Jednokomendowy Onboarding Projektów (`ai-team onboard` / `ai-team quickstart` / `ai-team setup`)**:
+  - Automatyczna inicjalizacja repozytorium Git (jeśli brak), instalacja lub aktualizacja `ai-team` z auto-detekcją stosu technologicznego.
+  - Automatyczne rozwiązywanie konfliktów szablonów ze strategią `--strategy upstream`.
+  - Automatyczna konfiguracja `ai-team.config.json` z bezpiecznymi domyślnymi wartościami (`allowUnreviewedLowRisk: true`, auto-detekcja poleceń testowych dla npm/pytest/cargo/go, reguły solo/multi provider).
+  - Automatyczne oczyszczenie `PROJECT_CONTEXT.md` (usunięcie placeholderów `TODO` i wygenerowanie metadanych projektu).
+  - Automatyczne zatwierdzenie konfiguracji w Git (`git commit`) oraz uruchomienie pełnej diagnostyki (`ai-team doctor`).
+- **Skrypty automatyzujące onboarding (`setup-project.sh` i `setup-project.ps1`)**:
+  - Uniwersalne skrypty Bash oraz PowerShell umożliwiające błyskawiczną konfigurację dowolnego repozytorium w kilka sekund jedną komendą.
+- **Masowe rozwiązywanie konfliktów (`ai-team resolve <project> all --strategy <keep|upstream>`)**:
+  - Możliwość rozwiązania wszystkich zaległych konfliktów szablonów jednym poleceniem.
 
 ### Added
 - **Tryb pojedynczego dostawcy Solo (`--solo` / `--single-provider` / `"singleProvider": true`)**:

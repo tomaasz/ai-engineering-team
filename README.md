@@ -155,6 +155,32 @@ pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
 
 ## Quick Start
 
+### Option A: One-Command Automated Onboarding (Recommended)
+
+To fully configure and prepare any existing or new project in seconds:
+
+```bash
+ai-team onboard .
+# or in solo mode (single provider, e.g. Claude or Gemini only):
+ai-team onboard . --solo
+```
+
+*This command automatically:*
+1. Initializes Git repository (if missing).
+2. Auto-detects project tech stack and installs matching profile (`--auto`).
+3. Automatically resolves any template conflicts (`--strategy upstream`).
+4. Configures `ai-team.config.json` (auto-detects test runners, permits unreviewed LOW-risk runs, sets solo/multi provider rules).
+5. Populates initial `PROJECT_CONTEXT.md` (cleans TODO placeholders with inferred metadata).
+6. Commits setup to Git and executes system readiness verification (`ai-team doctor`).
+
+Standalone onboarding scripts are also available:
+- **Linux / WSL (Bash):** `./setup-project.sh /path/to/project`
+- **Windows (PowerShell):** `.\setup-project.ps1 C:\path\to\project`
+
+---
+
+### Option B: Manual Step-by-Step Installation
+
 1. Navigate to your target project directory:
    ```bash
    cd /path/to/your-project

@@ -9,7 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [4.6.0] - 2026-09-14
+## [4.7.0] - 2026-09-14
+
+### Added
+- **One-Command Project Onboarding (`ai-team onboard` / `ai-team quickstart` / `ai-team setup`)**:
+  - Automatically initializes Git (if not present), installs or updates `ai-team` with tech stack detection.
+  - Automatically resolves template conflicts with `--strategy upstream`.
+  - Automatically configures `ai-team.config.json` with safe defaults (`allowUnreviewedLowRisk: true`, smart verification commands for npm/pytest/cargo/go, solo/multi provider rules).
+  - Automatically cleans `PROJECT_CONTEXT.md` (removes `TODO` placeholders with inferred metadata).
+  - Automatically commits changes to Git and runs full healthcheck diagnostics (`ai-team doctor`).
+- **Automated Onboarding Scripts (`setup-project.sh` & `setup-project.ps1`)**:
+  - Universal Bash and PowerShell scripts enabling instant zero-config setup across multiple repositories with a single command.
+- **Bulk Conflict Resolution (`ai-team resolve <project> all --strategy <keep|upstream>`)**:
+  - Resolves all pending template update conflicts in a single command.
 
 ### Added
 - **Single-Provider Solo Mode (`--solo` / `--single-provider` / `"singleProvider": true`)**:
