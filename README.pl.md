@@ -120,7 +120,9 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 ### Instalacja konkretnej wersji
 
 ```bash
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
 ```
 
 ### Aktualizacja
@@ -236,6 +238,11 @@ Profile determinują zestaw instalowanych modułów umiejętności (Skills) oraz
 
 - **Dynamiczny dobór skilli w Runnerze**:
   Podczas `ai-team run` orkiestrator automatycznie priorytetyzuje skille adekwatne do tematu zadania i zmienionych plików (np. `postgres` dla migracji SQL, `python` dla skryptów), zachowując stałą obecność kluczowych reguł `core`.
+
+- **Autonomiczny i proaktywny dobór przez Agenta AI**:
+  Nie musisz ręcznie instalować skilli. Podczas wykonywania `ai-team run` orkiestrator AI automatycznie wykrywa brakujące skille dla zadania lub nowo wprowadzonych technologii w diffie implementacji (np. dodanie `devops/docker-quality`, gdy powstaną pliki Docker, czy `postgres/postgres` dla migracji SQL) i proaktywnie je wdraża przed niezależnym review.
+  - Wyłączenie automatycznego doboru: flaga `--no-auto-skills` lub ustawienie `"autoSkills": false` w `ai-team.config.json`.
+  - Agenci mogą również proaktywnie formułować konwencje specyficzne dla projektu w `.agents/skills/project/`.
 
 ---
 

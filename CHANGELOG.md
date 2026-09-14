@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.4.0] - 2026-09-14
+
+### Added
+- **Proactive & Autonomous Skill Provisioning by AI Agents**:
+  - The AI Orchestrator now automatically and autonomously manages skills without requiring user intervention or manual CLI commands.
+  - **Pre-Implementation Stage**: Prior to starting work, the runner inspects project tech stack markers and task prompt intent to automatically install missing matching skills from the catalog.
+  - **Post-Implementation Stage**: Inspects files touched or introduced during implementation diff (e.g. Dockerfiles, SQL schemas, migrations) and automatically provisions matching skills before independent review rounds.
+  - **Autonomous Project Skills**: Instructed agents in `AI_TEAM.md` and `AGENTS.md` to formulate and maintain project-specific conventions and patterns under `.agents/skills/project/<name>/SKILL.md`.
+  - **Configuration & Opt-Out**: Enabled by default (`"autoSkills": true`), with optional manual opt-out via `--no-auto-skills` flag in `ai-team run` or setting `"autoSkills": false` in `ai-team.config.json`.
+
 ## [4.3.0] - 2026-09-14
 
 ### Added

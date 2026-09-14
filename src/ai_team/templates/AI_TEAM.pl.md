@@ -45,3 +45,7 @@ Verdict: PASS / PASS_WITH_NOTES / CHANGES_REQUIRED.
 Nierozwiązane BLOCKER/HIGH wymagają CHANGES_REQUIRED.
 Wymagane recenzje nie mogą być pomijane. Ostateczny wynik zależy także od komend
 weryfikacji uruchomionych przez runner i git diff --check.
+
+## Skille
+- Orkiestrator i agenci w pełni automatycznie i proaktywnie dołączają potrzebne skille z katalogu szablonów po wykryciu odpowiednich technologii lub wymagań zadania.
+- Agenci mają uprawnienie do proaktywnego tworzenia i aktualizowania wytycznych architektonicznych specyficznych dla projektu w `.agents/skills/project/<nazwa>/SKILL.md` (i odpowiedniku w `.claude/skills/project/`). Skille projektowe są chronione przed nadpisaniem przy aktualizacjach frameworka.

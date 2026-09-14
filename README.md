@@ -120,7 +120,9 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 ### Installing a Specific Version
 
 ```bash
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
 ```
 
 ### Upgrading
@@ -236,6 +238,11 @@ Profiles determine the set of skills and templates installed:
 
 - **Dynamic Task Routing in Runner**:
   During `ai-team run`, the orchestrator prioritizes relevant skills (e.g. `postgres` for SQL/migration tasks, `python` for Python scripts) while always enforcing baseline safety and review criteria.
+
+- **Autonomous & Proactive Provisioning by AI Agents**:
+  You do not need to manually install skills. When executing `ai-team run`, the AI orchestrator automatically detects missing skills for the task or newly introduced technologies in the implementation diff (e.g. adding `devops/docker-quality` when Docker files are created, or `postgres/postgres` for SQL migrations) and provisions them autonomously before independent review.
+  - To disable automatic provisioning: use `--no-auto-skills` or set `"autoSkills": false` in `ai-team.config.json`.
+  - Agents can also proactively formulate project-specific conventions under `.agents/skills/project/`.
 
 ---
 

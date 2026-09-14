@@ -8,6 +8,7 @@ from ai_team.skills import (
     add_skill,
     remove_skill,
     filter_skills_for_task,
+    proactive_skill_provision,
 )
 from ai_team.installer import install, status
 from ai_team.cli import main, parser
@@ -200,3 +201,35 @@ def test_cli_skills_commands(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert '[REMOVED] devops/docker-quality' in out
     assert not (tmp_path / '.agents/skills/devops/docker-quality/SKILL.md').exists()
+
+
+def test_proactive_skill_provision_from_prompt(tmp_path):
+    init_git_repo(tmp_path)
+    install(tmp_path, 'core')
+
+    # Agent detects requirement from prompt and autonomously provisions the skill
+    provisioned = proactive_skill_provision(tmp_path, prompt="Please containerize application with Dockerfile")
+    assert any(p['id'] == 'devops/docker-quality' for p in provisioned)
+    assert (tmp_path / '.agents/skills/devops/docker-quality/SKILL.md').exists()
+    assert (tmp_path / '.claude/skills/devops/docker-quality/SKILL.md').exists()
+
+    # Calling again is a no-op (skill already provisioned)
+    provisioned_again = proactive_skill_provision(tmp_path, prompt="Please containerize application with Dockerfile")
+    assert provisioned_again == []
+
+
+def test_proactive_skill_provision_from_touched_files(tmp_path):
+    init_git_repo(tmp_path)
+    install(tmp_path, 'core')
+
+    # Agent completed an implementation that touched/created a SQL migration
+    provisioned = proactive_skill_provision(tmp_path, touched_files=['migrations/001_create_users.sql'])
+    assert any(p['id'] == 'postgres/postgres' for p in provisioned)
+    assert (tmp_path / '.agents/skills/postgres/postgres/SKILL.md').exists()
+    assert (tmp_path / '.claude/skills/postgres/postgres/SKILL.md').exists()
+
+
+def test_cli_no_auto_skills_flag():
+    p = parser()
+    args = p.parse_args(['run', '.', 'test prompt', '--no-auto-skills'])
+    assert args.no_auto_skills is True

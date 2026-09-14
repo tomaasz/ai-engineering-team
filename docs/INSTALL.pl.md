@@ -7,7 +7,9 @@
 Zainstaluj Pythona 3.10+, Git i `pipx`, a potem wersję, którą sprawdziłeś:
 
 ```bash
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@<sprawdzony-commit-lub-wydanie>"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
 ai-team --version
 ```
 
@@ -29,6 +31,7 @@ ai-team install . --auto --lang pl
 ai-team install . --profile core --lang pl
 ```
 
+Dostępne profile to `core`, `python`, `web`, `postgres`, `ocr`, `geneteka` i `full`. Profil wybiera szablony i skille; nie wykrywa stacku ani nie dowodzi poprawności komend.
 Dostępne profile to `core`, `python`, `web`, `postgres`, `ocr`, `geneteka` i `full`. Flaga `--auto` automatycznie analizuje sygnatury repozytorium i dobiera zalecany profil.
 
 `--lang` wybiera język instalowanych instrukcji agentów i skilli (`en` domyślnie albo `pl`). Do projektu trafia tylko jedna wersja językowa, a runner formułuje własne prompty etapów w tym samym języku, więc żaden przebieg nie niesie dwóch wersji naraz. Wybrany język zapisuje się w `.ai-team/state.json` oraz jako `language` w `ai-team.config.json`; `ai-team update . --lang en` przełącza oba naraz.

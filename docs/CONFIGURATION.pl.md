@@ -129,3 +129,7 @@ Opcjonalny obiekt `antigravity` konfiguruje `agy`: `model`, `sandbox`, `fullAuto
 - `useWorktree` (`boolean`, domyślnie: `false`): Gdy `true`, uruchamia przepływ agentów w odizolowanym drzewie roboczym `.ai/worktrees/<run_id>`. Twój katalog roboczy i aktywna gałąź pozostają w pełni nienaruszone. Można włączyć również flagą `--worktree` w CLI.
 - `autoMerge` (`boolean`, domyślnie: `false`): Gdy `true`, automatycznie scala zmiany z izolowanego przebiegu worktree do bieżącej gałęzi i usuwa gałąź roboczą po zakończeniu zadania bez konieczności interaktywnego potwierdzania. Można włączyć również flagą `--auto-merge` / `--merge` w CLI.
 
+## Autonomiczny dobór skilli
+
+- `autoSkills` (`boolean`, domyślnie: `true`): Gdy `true`, włącza proaktywny dobór skilli przez agentów AI. Runner bada stack projektu, słowa kluczowe w prompcie zadania oraz pliki zmienione podczas implementacji, automatycznie doinstalowując brakujące skille z katalogu szablonów (np. `devops/docker-quality` gdy powstaną pliki Docker, lub `postgres/postgres` dla migracji SQL). Można wyłączyć flagą `--no-auto-skills` w `ai-team run` lub ustawiając `"autoSkills": false`.
+

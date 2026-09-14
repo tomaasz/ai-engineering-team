@@ -51,6 +51,7 @@ def parser():
     x.add_argument('--auto-merge', '--merge', dest='auto_merge', action='store_true', help='Automatically merge into target branch on success and delete temporary branch')
     x.add_argument('--auto-discard', '--discard', dest='auto_discard', action='store_true', help='Automatically discard changes and delete temporary branch')
     x.add_argument('--non-interactive', action='store_true', help='Do not prompt interactively after isolated run')
+    x.add_argument('--no-auto-skills', action='store_true', help='Disable automatic and proactive skill provisioning by AI agents')
 
     x = s.add_parser('resume')
     x.add_argument('run_id')
@@ -176,8 +177,10 @@ def main():
             prompt = a.prompt_opt or a.prompt or input('What should the AI Engineering Team do? ').strip()
             if not prompt:
                 raise RuntimeError('Prompt is empty.')
+            auto_skills = False if getattr(a, 'no_auto_skills', False) else None
             return run_team(project, prompt, use_worktree=a.worktree, auto_merge=a.auto_merge,
-                            auto_discard=a.auto_discard, non_interactive=a.non_interactive)
+                            auto_discard=a.auto_discard, non_interactive=a.non_interactive,
+                            auto_skills=auto_skills)
         if a.command == 'runs':
             return runs(project)
         if a.command == 'resume':

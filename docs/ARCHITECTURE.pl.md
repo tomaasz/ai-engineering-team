@@ -10,7 +10,9 @@ Pakiet zawiera dispatcher, adaptery dostawców, instalator, profile, instrukcje 
 prompt
   -> kontrola gotowości (główny dostawca + każde CLI recenzenta z dowolnego poziomu polityki)
   -> read-only triage (ryzyko w JSON)
+  -> proaktywny dobór skilli (analiza stacku i promptu przed implementacją)
   -> implementacja przez głównego dostawcę
+  -> generowanie diffu i wtórny dobór skilli (analiza plików dodanych w diffie)
   -> eskalacja ryzyka ze zmienionych ścieżek, zmienionej treści i plików guardrail
   -> niezależne recenzje (werdykty JSON) na podstawie wygenerowanego diff.patch
   -> integracja gdy potrzebna (główny dostawca albo roleProviders.integrator)
@@ -24,7 +26,9 @@ Głównym dostawcą może być `agy`, `codex` albo `claude`. Polityka recenzji m
 
 Triage zwraca `{"risk":"LOW|MEDIUM|HIGH"}`. Recenzje i weryfikacja końcowa zwracają `verdict`, `unresolved` i `summary`. Werdykt zaliczający nie może zawierać nierozwiązanych findingów. Dispatcher parsuje JSON, zamiast szukać słowa `PASS` w prozie. Niepoprawna odpowiedź wskazuje dostawcę, plik etapu i pierwsze 200 znaków tego, co wróciło.
 
+Prompty recenzji niosą jawną rubrykę jakości (najpierw poprawność, potem czy zmiana jest minimalna, wolna od przedwczesnej abstrakcji i spójna z otaczającym kodem) oraz treść każdego `.agents/skills/*/*/SKILL.md`, więc kryteria recenzji nie zależą od tego, czy dane CLI samo odnajdzie skille.
 Prompty recenzji niosą jawną rubrykę jakości (najpierw poprawność, potem czy zmiana jest minimalna, wolna od przedwczesnej abstrakcji i spójna z otaczającym kodem) oraz skille projektu z `.agents/skills/`. Mechanizm doboru skilli dynamicznie priorytetyzuje kluczowe wytyczne inżynieryjne oraz skille domenowe dopasowane do tematu zadania i zmienionych plików.
+Prompty recenzji niosą jawną rubrykę jakości (najpierw poprawność, potem czy zmiana jest minimalna, wolna od przedwczesnej abstrakcji i spójna z otaczającym kodem) oraz skille projektu z `.agents/skills/`. Mechanizm doboru skilli dynamicznie priorytetyzuje kluczowe wytyczne inżynieryjne oraz skille domenowe dopasowane do tematu zadania i zmienionych plików. Przy włączonym doborze automatycznym brakujące skille wynikające ze stacku, promptu lub nowych plików są proaktywnie doinstalowywane przed rundami recenzji.
 
 Ryzyko jest przeliczane na podstawie klasyfikacji początkowej, liczby zmienionych plików, wbudowanych globów wrażliwych nazw, `riskPaths`, treści dodanych linii oraz stałej listy guardrail. Pliki definiujące sposób, w jaki zespół recenzuje sam siebie — `ai-team.config.json`, `AI_TEAM.md`, `PROJECT_CONTEXT.md`, pliki instrukcji AI oraz wszystko w `.agents/agents/`, `.claude/agents/`, `.agents/skills/` i `.claude/skills/` — zawsze eskalują do `HIGH`. Runner przerywa też przebieg, jeśli `ai-team.config.json` zmieni się w jego trakcie. Dopasowanie po nazwie pozostaje heurystyką i nie rozumie semantyki kodu; dopasowanie po treści obejmuje wyłącznie destrukcyjny SQL, wyłączoną weryfikację TLS i niebezpieczną deserializację.
 

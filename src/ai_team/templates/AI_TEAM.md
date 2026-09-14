@@ -45,3 +45,7 @@ Verdict: PASS / PASS_WITH_NOTES / CHANGES_REQUIRED.
 Unresolved BLOCKER/HIGH findings require CHANGES_REQUIRED.
 Required reviews can never be skipped. The final result also depends on the verification commands
 the runner executes and on git diff --check.
+
+## Skills
+- The orchestrator and agents automatically and proactively provision needed skills from the framework catalog when matching technologies or tasks are detected.
+- Agents are empowered to proactively document project-specific architecture, conventions, and constraints in `.agents/skills/project/<name>/SKILL.md` (and mirror in `.claude/skills/project/`). Project skills are protected from being overwritten by framework updates.

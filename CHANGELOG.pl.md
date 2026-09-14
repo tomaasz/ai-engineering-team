@@ -9,6 +9,16 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.4.0] - 2026-09-14
+
+### Added
+- **Autonomiczny i proaktywny dobór skilli przez Agenta AI**:
+  - Orkiestrator AI automatycznie i proaktywnie zarządza skillami bez konieczności ręcznego wywoływania komend CLI przez użytkownika.
+  - **Etap przed implementacją**: Przed rozpoczęciem prac runner analizuje sygnatury stosu technologicznego oraz intencję promptu zadania, automatycznie doinstalowując brakujące skille z katalogu szablonów.
+  - **Etap po implementacji**: Analizuje pliki zmienione lub dodane w wygenerowanym diffie (np. Dockerfile, schematy SQL, pliki migracji) i proaktywnie doinstalowuje pasujące skille przed przystąpieniem do niezależnego review.
+  - **Autonomiczne skille projektowe**: Agenci w instrukcjach `AI_TEAM.md` i `AGENTS.md` zostali upoważnieni do samodzielnego formułowania i utrzymywania reguł projektowych w `.agents/skills/project/<nazwa>/SKILL.md`.
+  - **Konfiguracja i wyłączanie**: Funkcja domyślnie włączona (`"autoSkills": true`), z możliwością wyłączenia flagą `--no-auto-skills` w `ai-team run` lub parametrem `"autoSkills": false` w `ai-team.config.json`.
+
 ## [4.3.0] - 2026-09-14
 
 ### Added

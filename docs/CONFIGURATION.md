@@ -134,3 +134,7 @@ The optional `antigravity` object configures `agy`: `model`, `sandbox`, `fullAut
 - `useWorktree` (`boolean`, default: `false`): When `true`, runs the multi-agent workflow inside an isolated `.ai/worktrees/<run_id>` Git worktree. Your working tree and active branch remain completely untouched. Can also be enabled via `--worktree` flag on the CLI.
 - `autoMerge` (`boolean`, default: `false`): When `true`, automatically merges changes from isolated worktree runs into the active branch and deletes the temporary branch upon run completion, without requiring interactive confirmation. Can also be enabled via `--auto-merge` / `--merge` on the CLI.
 
+## Autonomous skill provisioning
+
+- `autoSkills` (`boolean`, default: `true`): When `true`, enables proactive skill provisioning by AI agents. The runner inspects project stack, task prompt keywords, and files modified during implementation to automatically install required skills from the template catalog (e.g. `devops/docker-quality` when Docker files are created, or `postgres/postgres` for SQL migrations). Can be disabled via `--no-auto-skills` flag on `ai-team run` or by setting `"autoSkills": false`.
+

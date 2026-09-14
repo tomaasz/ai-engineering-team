@@ -487,3 +487,101 @@ def filter_skills_for_task(project: Path, prompt: str = '', touched_files: Optio
     if total_len <= 18000:
         return selected + optional
     return selected
+
+
+def proactive_skill_provision(
+    project: Path,
+    prompt: str = '',
+    touched_files: Optional[List[str]] = None,
+    lang: str = 'en'
+) -> List[Dict[str, Any]]:
+    """Proactively discover and provision missing skills from template catalog based on stack, task, and touched files."""
+    try:
+        project = ensure_git_repo(project.resolve())
+    except RuntimeError:
+        return []
+
+    available = {x['id']: x for x in list_skills(project)['available']}
+    installed_ids = {s['id'] for s in list_skills(project)['installed']}
+
+    prompt_lower = (prompt or '').lower()
+    touched_set = {f.lower() for f in (touched_files or [])}
+    stack = detect_stack(project)
+
+    needed_skill_ids = set()
+
+    # 1. Stack-based needs
+    if 'python' in stack['languages'] and 'python/python-quality' not in installed_ids:
+        needed_skill_ids.add('python/python-quality')
+    if 'postgres' in stack['databases'] and 'postgres/postgres' not in installed_ids:
+        needed_skill_ids.add('postgres/postgres')
+    if 'browser' in stack['tools'] and 'browser/browser-automation' not in installed_ids:
+        needed_skill_ids.add('browser/browser-automation')
+    if 'docker' in stack['tools'] and 'devops/docker-quality' not in installed_ids:
+        needed_skill_ids.add('devops/docker-quality')
+    if 'ocr' in stack['tools'] and 'ocr/ocr-pipeline' not in installed_ids:
+        needed_skill_ids.add('ocr/ocr-pipeline')
+    if 'genealogy' in stack['tools'] and 'genealogy/genealogy-etl' not in installed_ids:
+        needed_skill_ids.add('genealogy/genealogy-etl')
+
+    # 2. Prompt-based needs
+    if any(k in prompt_lower for k in ('docker', 'container', 'kontener', 'compose', 'image', 'dockerfile')):
+        if 'devops/docker-quality' not in installed_ids:
+            needed_skill_ids.add('devops/docker-quality')
+
+    if any(k in prompt_lower for k in ('postgres', 'sql', 'query', 'baza', 'tabel', 'migracj', 'database', 'schema')):
+        if 'postgres/postgres' not in installed_ids:
+            needed_skill_ids.add('postgres/postgres')
+
+    if any(k in prompt_lower for k in ('browser', 'playwright', 'cypress', 'e2e', 'selenium', 'przeglądark', 'dom')):
+        if 'browser/browser-automation' not in installed_ids:
+            needed_skill_ids.add('browser/browser-automation')
+
+    if any(k in prompt_lower for k in ('python', 'pytest', 'pip', 'def ', 'class ', 'requirements')):
+        if 'python/python-quality' not in installed_ids:
+            needed_skill_ids.add('python/python-quality')
+
+    if any(k in prompt_lower for k in ('secur', 'owasp', 'bezpiecz', 'auth', 'token', 'xss', 'inject', 'hasł', 'secret', 'szyfr', 'crypt')):
+        if 'security/secure-coding' not in installed_ids:
+            needed_skill_ids.add('security/secure-coding')
+
+    if any(k in prompt_lower for k in ('ocr', 'scan', 'tesseract', 'rozpoznaw', 'skan')):
+        if 'ocr/ocr-pipeline' not in installed_ids:
+            needed_skill_ids.add('ocr/ocr-pipeline')
+
+    if any(k in prompt_lower for k in ('genealog', 'gedcom', 'metryk', 'akt', 'geneteka')):
+        if 'genealogy/genealogy-etl' not in installed_ids:
+            needed_skill_ids.add('genealogy/genealogy-etl')
+
+    # 3. Touched files needs (e.g. from diff after implementation)
+    if any(f.endswith('.py') or 'pyproject' in f or 'requirements' in f for f in touched_set):
+        if 'python/python-quality' not in installed_ids:
+            needed_skill_ids.add('python/python-quality')
+
+    if any(f.endswith('.sql') or 'migration' in f or 'alembic' in f or 'schema' in f for f in touched_set):
+        if 'postgres/postgres' not in installed_ids:
+            needed_skill_ids.add('postgres/postgres')
+
+    if any('docker' in f or 'compose' in f or 'containerfile' in f for f in touched_set):
+        if 'devops/docker-quality' not in installed_ids:
+            needed_skill_ids.add('devops/docker-quality')
+
+    if any('playwright' in f or 'cypress' in f or 'e2e' in f for f in touched_set):
+        if 'browser/browser-automation' not in installed_ids:
+            needed_skill_ids.add('browser/browser-automation')
+
+    provisioned = []
+    for skill_id in sorted(needed_skill_ids):
+        if skill_id in available:
+            try:
+                res = add_skill(project, skill_id, lang=lang)
+                provisioned.append(res)
+                installed_ids.add(skill_id)
+                tag = '[AUTO-SKILL]'
+                msg = f"Agent proaktywnie dołączył skill '{skill_id}' do projektu." if lang == 'pl' else \
+                      f"Agent proactively provisioned skill '{skill_id}' for this run."
+                print(f"{tag} {msg}")
+            except Exception:
+                pass
+
+    return provisioned

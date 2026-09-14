@@ -41,7 +41,7 @@ def save_json(path: Path, data):
     content = json.dumps(data, ensure_ascii=False, indent=2)+'\n'
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as stream:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='\n', dir=path.parent, delete=False) as stream:
             temporary = Path(stream.name)
             stream.write(content)
         os.replace(temporary, path)

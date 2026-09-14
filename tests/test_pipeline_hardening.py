@@ -213,7 +213,7 @@ def test_runs_counts_uncommitted_work_on_the_checked_out_branch(project, monkeyp
         if role == 'orchestrator':
             (project / 'feature.py').write_text('def add(a, b):\n    return a + b\n', encoding='utf-8')
     mock_agents(monkeypatch, 'LOW', effect)
-    assert runner.run_team(project, 'Task') == 0, report(project)
+    assert runner.run_team(project, 'Task', auto_skills=False) == 0, report(project)
     assert runner.runs(project) == 0
     out = capsys.readouterr().out
     assert '1 file(s)' in out

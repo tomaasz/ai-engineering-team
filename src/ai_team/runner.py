@@ -541,11 +541,26 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
                                    'run started under no longer match the file. Review the diff on '
                                    f'branch {branch} before rerunning.')
 
+        if config.get('autoSkills', True):
+            try:
+                from .skills import proactive_skill_provision
+                proactive_skill_provision(project, prompt=user_prompt, lang=config.get('language', 'en'))
+            except Exception:
+                pass
         require_reviewers(risk)
         _ask(config, project, rd, primary, context + f'RISK: {risk}\n' + _text(config, 'implement'),
              'orchestrator', 'primary.md')
         guard_config()
         for round_number in range(1, max_rounds + 1):
+            if config.get('autoSkills', True):
+                try:
+                    from .skills import proactive_skill_provision
+                    diff_names = _git(project, 'diff', '--name-only', base, check=False).stdout.splitlines()
+                    untracked_names = [x for x in _git(project, 'ls-files', '--others', '--exclude-standard').stdout.splitlines() if x]
+                    all_touched = [x.strip() for x in diff_names + untracked_names if x.strip()]
+                    proactive_skill_provision(project, prompt=user_prompt, touched_files=all_touched, lang=config.get('language', 'en'))
+                except Exception:
+                    pass
             risk = _risk(project, base, risk, config)
             report['risk'] = risk
             reviewers = require_reviewers(risk)
@@ -774,9 +789,11 @@ def _prompt_worktree_merge(project, base, branch, current, run_id, config,
                 print("Invalid choice. Please choose: [y]es, [d]iff, [x] discard, [n]o.")
 
 
-def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_discard=None, non_interactive=False):
+def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_discard=None, non_interactive=False, auto_skills=None):
     project = ensure_git_repo(project.resolve())
     config = load_config(project)
+    if auto_skills is not None:
+        config['autoSkills'] = auto_skills
     if use_worktree is None:
         use_worktree = config.get('useWorktree', False)
     primary = config.get('primaryProvider', 'agy')
