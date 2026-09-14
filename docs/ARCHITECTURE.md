@@ -24,7 +24,7 @@ The primary provider can be `agy`, `codex`, or `claude`. Review policy must spec
 
 Triage returns `{"risk":"LOW|MEDIUM|HIGH"}`. Reviews and final verification return `verdict`, `unresolved`, and `summary`. A passing verdict cannot contain unresolved findings. The dispatcher parses JSON instead of regex matching `PASS` in freeform text. An invalid response identifies the provider, stage file, and the first 200 characters of the received output.
 
-Review prompts include an explicit quality rubric (correctness first, then whether the change is minimal, free of premature abstraction, and consistent with surrounding code) and the contents of every `.agents/skills/*/*/SKILL.md`.
+Review prompts include an explicit quality rubric (correctness first, then whether the change is minimal, free of premature abstraction, and consistent with surrounding code) and project skills from `.agents/skills/`. The skill routing mechanism dynamically prioritizes core guidelines and domain skills matched against the task prompt and touched files.
 
 Risk is computed from the initial triage classification, count of changed files, built-in sensitive path globs, `riskPaths`, added content patterns, and a fixed list of guardrail files. Files defining how the team reviews itself — `ai-team.config.json`, `AI_TEAM.md`, `PROJECT_CONTEXT.md`, AI instruction files, and anything under `.agents/agents/`, `.claude/agents/`, `.agents/skills/`, and `.claude/skills/` — always escalate to `HIGH`. The runner also halts if `ai-team.config.json` changes during the run. Path matching remains a heuristic; content-based matching targets destructive SQL, disabled TLS verification, and unsafe deserialization.
 

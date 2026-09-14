@@ -9,6 +9,18 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.3.0] - 2026-09-14
+
+### Added
+- **Inteligentne wykrywanie stosu i instalacja automatyczna (`ai-team install --auto`)**: Automatyczna analiza sygnatur repozytorium (`pyproject.toml`, `package.json`, `alembic`, `Dockerfile` itp.) pod kątem języków, baz danych i narzędzi, wraz z doborem optymalnego profilu.
+- **Dedykowany interfejs CLI do zarządzania skillami (`ai-team skill` / `ai-team skills`)**:
+  - `list`: Przegląd zainstalowanych skilli (ze statusami `MANAGED`, `LOCAL`, `CUSTOM`) oraz dostępnych w katalogu.
+  - `suggest`: Analiza stosu repozytorium i prezentacja rekomendacji skilli wraz z uzasadnieniem.
+  - `add <skill>`: Instalacja pojedynczego skilla z katalogu szablonów do `.agents/skills/` i `.claude/skills/` wraz z rejestracją w `.ai-team/state.json`.
+  - `remove <skill>`: Bezpieczne odinstalowanie zarządzanego skilla i wyrejestrowanie ze śledzenia.
+- **Dynamiczny dobór skilli pod zadanie**: Orkiestrator w `runner.py` inteligentnie dopasowuje skille domenowe do treści prompta i zmienionych plików, oszczędzając tokeny okna kontekstowego LLM.
+- **Rozszerzenie katalogu skilli**: Dodano skille `devops/docker-quality` (bezpieczeństwo kontenerów, multi-stage, non-root) oraz `security/secure-coding` (ochrona OWASP, sanityzacja danych, zasada najmniejszych uprawnień) w wersjach EN i PL.
+
 ## [4.2.0] - 2026-09-14
 
 ### Added

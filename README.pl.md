@@ -120,7 +120,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 ### Instalacja konkretnej wersji
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 ```
 
 ### Aktualizacja
@@ -204,6 +204,38 @@ Profile determinują zestaw instalowanych modułów umiejętności (Skills) oraz
 | `ocr` | Przetwarzanie dokumentów | Umiejętności bazowe + pipeline OCR, parsowanie layoutu, ekstrakcja tekstu. |
 | `geneteka` | Rekordy genealogiczne | Umiejętności bazowe + specjalistyczny pipeline ETL dla zbiorów danych. |
 | `full` | Projekty wielodziedzinowe | Pełny zestaw wszystkich dostępnych umiejętności i ról. |
+
+---
+
+## Zarządzanie skillami i autodetekcja
+
+`ai-team` udostępnia wbudowane wykrywanie stosu technologicznego, zarządzanie katalogiem skilli oraz dynamiczny dobór kontekstu dla zadań:
+
+- **Instalacja z autodetekcją profilu**:
+  ```bash
+  ai-team install . --auto
+  ```
+  Analizuje sygnatury repozytorium (`pyproject.toml`, `package.json`, `alembic`, `Dockerfile` itp.) i instaluje rekomendowany profil.
+
+- **Przegląd zainstalowanych i dostępnych skilli**:
+  ```bash
+  ai-team skill list
+  ```
+
+- **Rekomendacja skilli dla bieżącego kodu**:
+  ```bash
+  ai-team skill suggest
+  ```
+
+- **Dodawanie i usuwanie pojedynczych skilli**:
+  ```bash
+  ai-team skill add devops/docker-quality
+  ai-team skill add security/secure-coding
+  ai-team skill remove devops/docker-quality
+  ```
+
+- **Dynamiczny dobór skilli w Runnerze**:
+  Podczas `ai-team run` orkiestrator automatycznie priorytetyzuje skille adekwatne do tematu zadania i zmienionych plików (np. `postgres` dla migracji SQL, `python` dla skryptów), zachowując stałą obecność kluczowych reguł `core`.
 
 ---
 

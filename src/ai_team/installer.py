@@ -177,6 +177,14 @@ def _merge_tasks(project, template):
 def install(project: Path, profile_name: str, lang: str = 'en'):
     project = ensure_git_repo(project.resolve())
     _check_language(lang)
+    if profile_name == 'auto':
+        from .skills import detect_stack
+        detected = detect_stack(project)
+        profile_name = detected['recommended_profile']
+        tag = '[AUTO-DETEKCJA]' if lang == 'pl' else '[AUTO-DETECT]'
+        markers_str = ', '.join(detected['markers']) or ('ogólny' if lang == 'pl' else 'generic')
+        print(f"{tag} {'Wykryte sygnatury' if lang == 'pl' else 'Detected stack'}: {markers_str}")
+        print(f"{tag} {'Wybrany profil' if lang == 'pl' else 'Selected profile'}: '{profile_name}'")
     profile = _profile(profile_name)
     files = _selected(profile, lang)
     managed = {}

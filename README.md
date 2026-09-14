@@ -120,7 +120,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 ### Installing a Specific Version
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 ```
 
 ### Upgrading
@@ -204,6 +204,38 @@ Profiles determine the set of skills and templates installed:
 | `ocr` | Document processing | Base skills + OCR pipelines, layout parsing, text extraction. |
 | `geneteka` | Genealogical records | Base skills + specialized ETL pipelines for dataset parsing. |
 | `full` | Multi-domain projects | Complete set of all available skills and roles. |
+
+---
+
+## Skill Management and Auto-Discovery
+
+`ai-team` provides built-in tech stack detection, skill catalog management, and task-based dynamic context routing:
+
+- **Auto-Detect Profile**:
+  ```bash
+  ai-team install . --auto
+  ```
+  Scans repository markers (`pyproject.toml`, `package.json`, `alembic`, `Dockerfile`, etc.) and installs the recommended profile.
+
+- **Inspect Installed & Available Skills**:
+  ```bash
+  ai-team skill list
+  ```
+
+- **Suggest Skills for Current Codebase**:
+  ```bash
+  ai-team skill suggest
+  ```
+
+- **Add or Remove Specific Skills**:
+  ```bash
+  ai-team skill add devops/docker-quality
+  ai-team skill add security/secure-coding
+  ai-team skill remove devops/docker-quality
+  ```
+
+- **Dynamic Task Routing in Runner**:
+  During `ai-team run`, the orchestrator prioritizes relevant skills (e.g. `postgres` for SQL/migration tasks, `python` for Python scripts) while always enforcing baseline safety and review criteria.
 
 ---
 

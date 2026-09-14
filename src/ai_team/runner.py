@@ -206,10 +206,15 @@ def _run_snapshot(rd, own_prefix):
             if p.is_file() and not p.name.startswith(own_prefix)}
 
 
-def _skill_context(project, header='\n\nPROJECT SKILLS - apply these criteria:\n'):
+def _skill_context(project, header='\n\nPROJECT SKILLS - apply these criteria:\n', task_prompt='', touched_files=None):
     """Reviewers must not depend on each CLI discovering skills on its own."""
+    try:
+        from .skills import filter_skills_for_task
+        skill_paths = filter_skills_for_task(project, task_prompt, touched_files)
+    except Exception:
+        skill_paths = sorted(project.glob('.agents/skills/*/*/SKILL.md'))
     parts = [f'\n--- {p.relative_to(project).as_posix()} ---\n{_read(p)}'
-             for p in sorted(project.glob('.agents/skills/*/*/SKILL.md'))]
+             for p in skill_paths]
     text = ''.join(parts)
     if not text or len(text) > 20000:
         return ''
@@ -274,7 +279,7 @@ def _ask(config, project, rd, provider, prompt, role, filename, readonly=False):
     if role in ('triage', 'orchestrator'):
         prompt += _repomap_context(project, _text(config, 'repomap'))
     if readonly:
-        prompt += _skill_context(project, _text(config, 'skills'))
+        prompt += _skill_context(project, _text(config, 'skills'), task_prompt=prompt)
     before = _snapshot(project) if readonly else None
     run_before = _run_snapshot(rd, filename) if readonly else None
     final = rd / (filename + '.answer') if provider == 'codex' else None

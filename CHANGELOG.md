@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.3.0] - 2026-09-14
+
+### Added
+- **Intelligent Tech Stack Detection & Auto-Install (`ai-team install --auto`)**: Automatically analyzes repository markers (`pyproject.toml`, `package.json`, `alembic`, `Dockerfile`, etc.) to detect languages, frameworks, and databases, and installs the optimal domain profile.
+- **Dedicated Skill Management CLI (`ai-team skill` / `ai-team skills`)**:
+  - `list`: Inspect all installed skills (with status `MANAGED`, `LOCAL`, `CUSTOM`) and catalog skills.
+  - `suggest`: Analyze repository stack and display skill recommendations with detailed rationales.
+  - `add <skill>`: Install a specific skill from the catalog into both `.agents/skills/` and `.claude/skills/` and track in `.ai-team/state.json`.
+  - `remove <skill>`: Safely remove a managed skill and unregister from tracking.
+- **Dynamic Task-Based Skill Routing**: The orchestrator in `runner.py` intelligently matches domain skills against the task prompt and modified files, prioritizing relevant instructions while avoiding context window waste.
+- **Expanded Skill Catalog**: Added `devops/docker-quality` (container security, multi-stage builds, non-root users) and `security/secure-coding` (OWASP defense, input sanitization, least privilege) in both English and Polish.
+
 ## [4.2.0] - 2026-09-14
 
 ### Added
