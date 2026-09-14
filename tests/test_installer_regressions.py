@@ -96,7 +96,8 @@ def test_jsonc_tasks_merge_preserves_existing_semantics(tmp_path):
         encoding="utf-8",
     )
 
-    assert installer._merge_tasks(tmp_path, template_root() / ".vscode" / "tasks.json") == "merged"
+    status = installer._merge_tasks(tmp_path, template_root() / ".vscode" / "tasks.json")
+    assert status.startswith("merged") and not status.startswith("conflict")
 
     merged = load_jsonc(tasks)
     user_task = next(task for task in merged["tasks"] if task["label"] == "User task")
@@ -131,7 +132,7 @@ def test_retired_managed_template_remains_tracked_until_uninstall(tmp_path, monk
     source = tmp_path / "upstream.txt"
     source.write_text("framework content\n", encoding="utf-8")
     selected = {"retired-template.md": source}
-    monkeypatch.setattr(installer, "_selected", lambda profile: dict(selected))
+    monkeypatch.setattr(installer, "_selected", lambda profile, lang="en": dict(selected))
 
     installer.install(tmp_path, "core")
     selected.clear()
@@ -192,8 +193,8 @@ def test_same_label_task_updates_only_when_framework_owned(tmp_path, monkeypatch
 
     original_selected = installer._selected
 
-    def selected(profile):
-        files = original_selected(profile)
+    def selected(profile, lang="en"):
+        files = original_selected(profile, lang)
         files[".vscode/tasks.json"] = new_template
         return files
 

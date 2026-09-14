@@ -1,7 +1,7 @@
 ---
 name: task-planning
-description: Tworzy minimalny testowalny plan zmiany.
+description: Produces a minimal testable plan for a change.
 ---
 # task-planning
 
-Cel, kryteria akceptacji, istniejący punkt wejścia, minimalny zakres, ryzyko, rollback dla danych i komendy walidacyjne.
+Goal, acceptance criteria, the existing entry point, minimal scope, risk, data rollback and the validation commands.

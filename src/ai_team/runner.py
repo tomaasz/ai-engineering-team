@@ -1,31 +1,63 @@
 from datetime import datetime
 from contextvars import ContextVar
 from fnmatch import fnmatch
+from pathlib import Path
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
 import uuid
 
 from .utils import run, which, load_json, save_json, ensure_git_repo, safe_slug, sha256_file, project_path
-from .config import load_config, DEFAULT_POLICY
+from .config import load_config, DEFAULT_POLICY, DEFAULT_PROTECTED_IGNORED, GUARDRAIL_FILES
 
 _deadline = ContextVar('deadline', default=None)
 _agent_timeout = ContextVar('agent_timeout', default=3600)
+_passthrough_env = ContextVar('passthrough_env', default=())
+_protected_ignored = ContextVar('protected_ignored', default=DEFAULT_PROTECTED_IGNORED)
 
-_SECRET_RE = re.compile(r'(KEY|TOKEN|SECRET|PASSWORD|PASS|COOKIE|CREDENTIAL)', re.I)
+# Substrings and whole names that make a variable unsafe to hand to a model CLI. Connection
+# strings and agent sockets carry credentials without ever spelling "secret".
+_SECRET_RE = re.compile(
+    r'(KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|COOKIE|CREDENTIAL|AUTH|PRIVATE|CERT|SALT|SIGNING'
+    r'|SESSION|_DSN|_URI|_URL|(^|_)(PAT|DSN|JWT|SK|API)(_|$))', re.I)
+_SECRET_NAMES = {'KUBECONFIG', 'AWS_PROFILE', 'AWS_CONFIG_FILE', 'DOCKER_CONFIG',
+                 'GIT_ASKPASS', 'SSH_ASKPASS', 'NETRC', 'PGSERVICEFILE', 'PGPASSFILE'}
+# Trust anchors are paths, not secrets; stripping them silently breaks TLS behind a proxy.
+_ALWAYS_KEEP = {'SSL_CERT_FILE', 'SSL_CERT_DIR', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE',
+                'NODE_EXTRA_CA_CERTS', 'PATH', 'SYSTEMROOT', 'COMSPEC', 'TEMP', 'TMP', 'TMPDIR'}
+_NEW_GROUP = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0
 
 
-def _sanitized_env():
+def _sanitized_env(passthrough=None):
     """Strip secret-looking environment variables before spawning any subprocess."""
-    env = {k: v for k, v in os.environ.items() if not _SECRET_RE.search(k)}
+    allowed = set(passthrough if passthrough is not None else _passthrough_env.get())
+    env = {k: v for k, v in os.environ.items()
+           if k in allowed or k.upper() in _ALWAYS_KEEP
+           or (k.upper() not in _SECRET_NAMES and not _SECRET_RE.search(k))}
     env['AI_TEAM_SUBPROCESS'] = '1'
     return env
 
 
+def _terminate_tree(process):
+    """Kill descendants too; an orphaned agent keeps writing to the repository."""
+    try:
+        if sys.platform == 'win32':
+            subprocess.run(['taskkill', '/T', '/F', '/PID', str(process.pid)],
+                           capture_output=True, timeout=30)
+        else:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    finally:
+        process.kill()
+
+
 def _capture(cmd, cwd, out, err, allow_failure=False, timeout=None):
+    """Write the answer atomically: a stage file exists only if the stage really finished."""
     out.parent.mkdir(parents=True, exist_ok=True)
     seconds = timeout or _agent_timeout.get()
     deadline = _deadline.get()
@@ -33,17 +65,30 @@ def _capture(cmd, cwd, out, err, allow_failure=False, timeout=None):
         seconds = min(seconds, deadline - time.monotonic())
     if seconds <= 0:
         raise RuntimeError('Run timeout exceeded')
+    partial = out.with_name(out.name + '.partial')
+    failed = out.with_name(out.name + '.failed')
     try:
-        with out.open('w', encoding='utf-8') as fo, err.open('w', encoding='utf-8') as fe:
-            p = subprocess.run(cmd, cwd=str(cwd), text=True, stdout=fo, stderr=fe, timeout=seconds,
-                                env=_sanitized_env(), start_new_session=(sys.platform != 'win32'))
-    except subprocess.TimeoutExpired as exc:
-        with err.open('a', encoding='utf-8') as fe:
-            fe.write(f'Command timeout after {seconds}s: {exc}\n')
-        raise RuntimeError(f'Command timeout. Log: {err}') from exc
-    if p.returncode and not allow_failure:
-        raise RuntimeError(f'Command exited {p.returncode}. Log: {err}')
-    return p.returncode
+        with partial.open('w', encoding='utf-8') as fo, err.open('w', encoding='utf-8') as fe:
+            process = subprocess.Popen(cmd, cwd=str(cwd), text=True, stdout=fo, stderr=fe,
+                                       env=_sanitized_env(),
+                                       start_new_session=(sys.platform != 'win32'),
+                                       creationflags=_NEW_GROUP)
+            try:
+                code = process.wait(timeout=seconds)
+            except subprocess.TimeoutExpired as exc:
+                _terminate_tree(process)
+                process.wait(timeout=30)
+                with err.open('a', encoding='utf-8') as fe2:
+                    fe2.write(f'Command timeout after {seconds}s: {exc}\n')
+                raise RuntimeError(f'Command timeout after {seconds}s. '
+                                   f'Partial output: {failed}. Log: {err}') from exc
+        if code and not allow_failure:
+            raise RuntimeError(f'Command exited {code}. Partial output: {failed}. Log: {err}')
+        os.replace(partial, out)
+        return code
+    finally:
+        if partial.exists():
+            os.replace(partial, failed)
 
 
 def _git(project, *args, check=True):
@@ -54,10 +99,50 @@ def _read(path):
     return path.read_text(encoding='utf-8') if path.exists() else ''
 
 
+# Read-only stages are cheap by default; only the writing roles pay for maximum effort.
+_EFFORT_KEYS = {'triage': ('triageEffort', 'low'), 'reviewer': ('verificationEffort', 'medium'),
+                'verifier': ('verificationEffort', 'medium')}
+
+
+def _effort(config, role):
+    key, default = _EFFORT_KEYS.get(role, ('implementationEffort', 'high'))
+    return config.get('antigravity', {}).get(key, default)
+
+
+def _model(config, provider, role):
+    value = config.get('models', {}).get(provider)
+    if isinstance(value, dict):
+        return value.get(role) or value.get('default')
+    return value
+
+
+def _provider_args(config, provider, role):
+    roles = config.get('providerArgs', {}).get(provider, {})
+    return list(roles.get(role, roles.get('default', [])))
+
+
+def _apply_args(cmd, extra):
+    """Configured arguments win over runner defaults for the same flag."""
+    if not extra:
+        return cmd
+    valued = {extra[i] for i in range(len(extra) - 1)
+              if extra[i].startswith('-') and not extra[i + 1].startswith('-')}
+    bare = {x for x in extra if x.startswith('-')} - valued
+    result, skip = [], False
+    for item in cmd:
+        if skip:
+            skip = False
+        elif item in valued:
+            skip = True
+        elif item not in bare:
+            result.append(item)
+    return result + list(extra)
+
+
 def _agy(config, prompt, agent, effort):
     ac = config.get('antigravity', {})
     cmd = ['agy', '-p', prompt, '--agent', agent, '--output-format', 'text']
-    model = config.get('models', {}).get('agy') or ac.get('model')
+    model = _model(config, 'agy', agent) or ac.get('model')
     if model:
         cmd += ['--model', model]
     if effort:
@@ -71,16 +156,15 @@ def _agy(config, prompt, agent, effort):
 
 
 def _command(config, provider, prompt, role, readonly=False, output=None):
-    prompt = ('Read AI_TEAM.md and PROJECT_CONTEXT.md and relevant project skills. '
-              f'Your role is {role}. Do not push, merge or deploy.\n' + prompt)
+    prompt = _text(config, 'role').format(role=role) + prompt
     if provider == 'agy':
-        cmd = _agy(config, prompt, role, 'low' if role == 'triage' else 'high')
+        cmd = _agy(config, prompt, role, _effort(config, role))
         if readonly:
             cmd = [x for x in cmd if x != '--dangerously-skip-permissions']
             if '--sandbox' not in cmd:
                 cmd.append('--sandbox')
             cmd += ['--mode', 'plan']
-        return cmd
+        return _apply_args(cmd, _provider_args(config, provider, role))
     if provider == 'codex':
         cmd = ['codex', 'exec', '--ephemeral', '--sandbox', 'read-only' if readonly else 'workspace-write']
         if output is not None:
@@ -89,17 +173,24 @@ def _command(config, provider, prompt, role, readonly=False, output=None):
     else:
         cmd = ['claude', '-p', prompt, '--permission-mode', 'plan' if readonly else 'default',
                '--output-format', 'text', '--max-turns', '30']
-    model = config.get('models', {}).get(provider)
+    model = _model(config, provider, role)
     if model:
         cmd += ['--model', model]
-    return cmd
+    return _apply_args(cmd, _provider_args(config, provider, role))
+
+
+def _protected(name):
+    lowered = name.lower()
+    return any(fnmatch(lowered, glob.lower()) or fnmatch(Path(lowered).name, glob.lower())
+               for glob in _protected_ignored.get())
 
 
 def _snapshot(project):
-    """Include new files; exclude ignored runtime artifacts."""
-    names = _git(project, 'ls-files', '-z', '--cached', '--others', '--exclude-standard').stdout.split('\0')
+    """Include new files and protected ignored files; exclude ignored runtime artifacts."""
+    tracked = _git(project, 'ls-files', '-z', '--cached', '--others', '--exclude-standard').stdout.split('\0')
+    ignored = _git(project, 'ls-files', '-z', '--others', '--ignored', '--exclude-standard').stdout.split('\0')
     result = {}
-    for name in names:
+    for name in list(tracked) + [x for x in ignored if x and _protected(x)]:
         if not name or name.startswith('.ai/runs/') or name == '.ai/latest.txt':
             continue
         path = project_path(project, name)
@@ -107,53 +198,119 @@ def _snapshot(project):
     return result
 
 
+def _run_snapshot(rd, own_prefix):
+    """Guard the run directory itself: stage answers are the runner's cache, not model output."""
+    return {p.name: sha256_file(p) for p in sorted(rd.iterdir())
+            if p.is_file() and not p.name.startswith(own_prefix)}
+
+
+def _skill_context(project, header='\n\nPROJECT SKILLS - apply these criteria:\n'):
+    """Reviewers must not depend on each CLI discovering skills on its own."""
+    parts = [f'\n--- {p.relative_to(project).as_posix()} ---\n{_read(p)}'
+             for p in sorted(project.glob('.agents/skills/*/*/SKILL.md'))]
+    text = ''.join(parts)
+    if not text or len(text) > 20000:
+        return ''
+    return header + text
+
+
 def _ask(config, project, rd, provider, prompt, role, filename, readonly=False):
-    out = rd / filename
-    if out.exists():
-        # Resuming a run: a cached answer means this stage already completed.
+    out, done = rd / filename, rd / (filename + '.done')
+    if out.exists() and done.exists():
+        # Resuming a run: a completed stage is cached; a partial one is re-run.
         return _read(out)
+    if readonly:
+        prompt += _skill_context(project, _text(config, 'skills'))
     before = _snapshot(project) if readonly else None
+    run_before = _run_snapshot(rd, filename) if readonly else None
     final = rd / (filename + '.answer') if provider == 'codex' else None
     _capture(_command(config, provider, prompt, role, readonly, final), project,
              out, rd / (filename + '.stderr'))
     if final is not None:
         if not final.exists():
-            raise RuntimeError(f'Missing final answer: {final}')
+            raise RuntimeError(f'Missing final answer from {provider} ({role}): {final}')
         out.write_text(_read(final), encoding='utf-8')
-    if readonly and before != _snapshot(project):
-        raise RuntimeError(f'Read-only stage {role} modified project files')
+    if readonly:
+        if run_before != _run_snapshot(rd, filename):
+            raise RuntimeError(f'Stage {role} ({provider}) is read-only but wrote to the run directory')
+        if before != _snapshot(project):
+            raise RuntimeError(f'Stage {role} ({provider}) is read-only but modified project files')
+    done.write_text(datetime.now().isoformat(timespec='seconds'), encoding='utf-8')
     return _read(out)
 
 
-def _result(text, key, allowed):
+def _result(text, key, allowed, provider=None, source=None):
+    """Errors must name who answered and where the raw output is; the user has to act on it."""
+    origin = f' from {provider}' if provider else ''
+    where = f'. Raw output: {source}' if source else ''
+    excerpt = f' Got: {text.strip()[:200]!r}' if text and text.strip() else ''
     try:
         data = json.loads(text)
     except (ValueError, TypeError) as exc:
-        raise RuntimeError(f'Expected a JSON object with {key}') from exc
+        raise RuntimeError(f'Expected a JSON object with {key}{origin}{where}.{excerpt}') from exc
     if not isinstance(data, dict) or not isinstance(data.get(key), str) or data[key] not in allowed:
-        raise RuntimeError(f'Invalid {key} in structured result')
+        raise RuntimeError(f'Invalid {key} in structured result{origin}{where}.{excerpt}')
     if key == 'verdict':
         if not isinstance(data.get('unresolved'), list) or not isinstance(data.get('summary'), str):
-            raise RuntimeError('Verdict requires unresolved array and summary string')
+            raise RuntimeError(f'Verdict requires unresolved array and summary string{origin}{where}')
         if data['unresolved'] and data['verdict'] != 'CHANGES_REQUIRED':
-            raise RuntimeError('Passing verdict cannot contain unresolved findings')
+            raise RuntimeError(f'Passing verdict cannot contain unresolved findings{origin}{where}')
     return data
 
 
+BUILTIN_RISK_GLOBS = {'HIGH': [
+    '*auth*', '*authz*', '*login*', '*signin*', '*session*', '*token*', '*jwt*', '*oauth*',
+    '*sso*', '*saml*', '*ldap*', '*rbac*', '*permission*', '*access*', '*privilege*', '*admin*',
+    '*secret*', '*credential*', '*crypt*', '*password*', '*.pem', '*.key',
+    '*migration*', '*/versions/*', '*schema*', '*payment*', '*billing*', '*checkout*',
+    '*charge*', '*invoice*', '*subscription*', '*.tf', '*.tfvars', '*.tfstate', '*.tf.json',
+    '*dockerfile*', '*containerfile*', '*docker-compose*', '.github/workflows/*',
+    '.gitlab-ci.yml', 'jenkinsfile', '*.tfbackend',
+]}
+# A filename never proves intent; escalate on what the change actually does.
+RISKY_CONTENT = re.compile(
+    r'(DROP\s+(TABLE|DATABASE|SCHEMA)|TRUNCATE\s+TABLE|DELETE\s+FROM|ALTER\s+TABLE|GRANT\s+ALL'
+    r'|os\.system\(|shell\s*=\s*True|pickle\.loads?\(|yaml\.load\(|(^|[^\w.])eval\('
+    r'|verify\s*=\s*False|check_hostname\s*=\s*False|rejectUnauthorized\s*:\s*false'
+    r'|BEGIN [A-Z ]*PRIVATE KEY)', re.I | re.M)
+
+
+def _is_guardrail(name):
+    """Files that define how the team reviews itself must never slip through unreviewed."""
+    return name in GUARDRAIL_FILES or name.startswith(('.agents/agents/', '.claude/agents/',
+                                                       '.agents/skills/', '.claude/skills/'))
+
+
+def _changed_content(project, base, untracked):
+    added = [line for line in _git(project, 'diff', '-U0', base).stdout.splitlines()
+             if line.startswith('+') and not line.startswith('+++')]
+    for name in untracked:
+        path = project / name
+        try:
+            if path.is_file() and path.stat().st_size <= 512 * 1024:
+                added.append(path.read_text(encoding='utf-8', errors='ignore'))
+        except OSError:
+            continue
+    return '\n'.join(added)
+
+
 def _risk(project, base, initial, config):
-    names = set(_git(project, 'diff', '--name-only', base).stdout.splitlines())
-    names.update(_git(project, 'ls-files', '--others', '--exclude-standard').stdout.splitlines())
+    untracked = [x for x in _git(project, 'ls-files', '--others', '--exclude-standard').stdout.splitlines() if x]
+    names = set(_git(project, 'diff', '--name-only', base).stdout.splitlines()) | set(untracked)
     levels = ['LOW', 'MEDIUM', 'HIGH']
     level = levels.index(initial)
     if len(names) > 1:
         level = max(level, 1)
-    patterns = {'HIGH': ['*auth*', '*secret*', '*migration*', '*.tf', '*Dockerfile*',
-                         '.github/workflows/*', '*payment*', '*permission*', '*schema*']}
+    if any(_is_guardrail(name) for name in names):
+        return 'HIGH'
+    patterns = {risk: list(globs) for risk, globs in BUILTIN_RISK_GLOBS.items()}
     for risk, globs in config.get('riskPaths', {}).items():
         patterns.setdefault(risk, []).extend(globs)
     for risk, globs in patterns.items():
         if any(fnmatch(name.lower(), pattern.lower()) for name in names for pattern in globs):
             level = max(level, levels.index(risk))
+    if level < 2 and RISKY_CONTENT.search(_changed_content(project, base, untracked)):
+        level = 2
     return levels[level]
 
 
@@ -187,8 +344,12 @@ def doctor(project, probe=False):
             problems.append('Unresolved installation conflicts: ' + ', '.join(state['conflicts']))
     except (OSError, ValueError, AttributeError):
         problems.append('Missing or invalid installation state')
-    if not (project / 'PROJECT_CONTEXT.md').is_file():
+    context_file = project / 'PROJECT_CONTEXT.md'
+    if not context_file.is_file():
         problems.append('Missing PROJECT_CONTEXT.md')
+    elif 'TODO' in _read(context_file):
+        problems.append('PROJECT_CONTEXT.md still contains TODO placeholders; '
+                        'models cannot match conventions they were never told')
     verification = config.get('verification', {})
     if not verification.get('commands') and not verification.get('noChecksReason', '').strip():
         problems.append('Configure verification.commands or an explicit noChecksReason')
@@ -202,22 +363,107 @@ def doctor(project, probe=False):
     return 1 if problems else 0
 
 
-VERDICT_PROMPT = ('Return ONLY JSON: {"verdict":"PASS|PASS_WITH_NOTES|CHANGES_REQUIRED",'
+QUALITY_RUBRIC = (
+    'Judge in this order: correctness > security > data loss > regressions > compatibility > '
+    'maintainability > style. Then judge the change as a change: is it the minimal edit that '
+    'satisfies the requirement, does it avoid abstraction introduced before a second caller '
+    'exists, does its naming and structure match the surrounding code, and does it leave dead '
+    'or duplicated code behind? Every finding needs Severity, Evidence (file:line), Impact and '
+    'a minimal fix. Working code that is needlessly complex is still a finding.')
+
+QUALITY_RUBRIC_PL = (
+    'Oceniaj w tej kolejności: poprawność > bezpieczeństwo > utrata danych > regresje > '
+    'kompatybilność > utrzymywalność > styl. Następnie oceń samą zmianę: czy jest minimalną '
+    'edycją spełniającą wymaganie, czy nie wprowadza abstrakcji przed drugim użyciem, czy jej '
+    'nazewnictwo i struktura są spójne z sąsiadującym kodem, czy nie zostawia martwego lub '
+    'zduplikowanego kodu. Każdy finding wymaga: Severity, Evidence (plik:linia), Impact i '
+    'minimalnej poprawki. Działający, ale niepotrzebnie złożony kod to nadal finding.')
+
+VERDICT_PROMPT = (QUALITY_RUBRIC +
+                  ' Return ONLY JSON: {"verdict":"PASS|PASS_WITH_NOTES|CHANGES_REQUIRED",'
                   '"unresolved":[],"summary":"evidence and reasoning"}. '
                   'List unresolved blocking/high findings in unresolved. No markdown fences.')
+
+VERDICT_PROMPT_PL = (QUALITY_RUBRIC_PL +
+                     ' Zwróć WYŁĄCZNIE JSON: {"verdict":"PASS|PASS_WITH_NOTES|CHANGES_REQUIRED",'
+                     '"unresolved":[],"summary":"dowody i uzasadnienie"}. '
+                     'Nierozwiązane findingi blocking/high wpisz do unresolved. Bez bloków markdown.')
+
+# Stage wording follows the installed templates, so a run never mixes two languages in one prompt.
+PROMPTS = {
+    'en': {
+        'verdict': VERDICT_PROMPT,
+        'role': ('Read AI_TEAM.md and PROJECT_CONTEXT.md and relevant project skills. '
+                 'Your role is {role}. Do not push, merge or deploy.\n'),
+        'skills': '\n\nPROJECT SKILLS - apply these criteria:\n',
+        'triage': 'Analyze risk without edits. Return ONLY JSON: {"risk":"LOW|MEDIUM|HIGH"}.',
+        'implement': ('Implement and test. For LOW use a minimal workflow; delegate only when '
+                      'complexity warrants it. External reviews are handled by the dispatcher.'),
+        'review': ('The change under review is in {patch} (regenerate with git diff {base} if needed). '
+                   'Independently review the current working tree including untracked files. '
+                   'Do not read other review reports. Do not edit. '),
+        'integrate': 'Resolve review findings with evidence. Reports:\n',
+        'verify': ('The change is in {patch}. Verify the final requirement and diff without edits. '
+                   'The runner executes configured checks. '),
+    },
+    'pl': {
+        'verdict': VERDICT_PROMPT_PL,
+        'role': ('Przeczytaj AI_TEAM.md i PROJECT_CONTEXT.md oraz odpowiednie skille projektu. '
+                 'Twoja rola to {role}. Nie wykonuj push, merge ani deploy.\n'),
+        'skills': '\n\nSKILLE PROJEKTU - stosuj te kryteria:\n',
+        'triage': 'Oceń ryzyko bez edycji. Zwróć WYŁĄCZNIE JSON: {"risk":"LOW|MEDIUM|HIGH"}.',
+        'implement': ('Zaimplementuj i przetestuj. Dla LOW użyj minimalnego przebiegu; deleguj tylko '
+                      'gdy uzasadnia to złożoność. Recenzje zewnętrzne obsługuje dispatcher.'),
+        'review': ('Recenzowana zmiana jest w {patch} (w razie potrzeby odtwórz przez git diff {base}). '
+                   'Niezależnie zrecenzuj bieżące drzewo robocze, łącznie z plikami nieśledzonymi. '
+                   'Nie czytaj raportów innych recenzentów. Nie edytuj. '),
+        'integrate': 'Rozstrzygnij findingi z review, podając dowody. Raporty:\n',
+        'verify': ('Zmiana jest w {patch}. Zweryfikuj końcowe wymaganie i diff bez edycji. '
+                   'Runner uruchamia skonfigurowane kontrole. '),
+    },
+}
+
+
+def _text(config, key):
+    return PROMPTS.get(config.get('language', 'en'), PROMPTS['en'])[key]
+
+
+def _verdict_prompt(config):
+    return _text(config, 'verdict')
+
+
+def _enter_limits(config):
+    """Bind every per-run context variable at once so none can be left set on exit."""
+    return [(var, var.set(value)) for var, value in [
+        (_deadline, time.monotonic() + config.get('runTimeoutSeconds', 14400)),
+        (_agent_timeout, config.get('agentTimeoutSeconds', 3600)),
+        (_passthrough_env, tuple(config.get('passthroughEnv', []))),
+        (_protected_ignored, tuple(config.get('protectedIgnoredPaths', DEFAULT_PROTECTED_IGNORED))),
+    ]]
+
+
+def _write_diff(project, base, rd):
+    """Hand reviewers the change itself instead of paying each one to rediscover it."""
+    patch = rd / 'diff.patch'
+    diff = _git(project, 'diff', base, check=False)
+    untracked = [x for x in _git(project, 'ls-files', '--others', '--exclude-standard').stdout.splitlines() if x]
+    patch.write_text((diff.stdout or '') + '\n\nUNTRACKED FILES:\n' + '\n'.join(untracked),
+                     encoding='utf-8')
+    return patch
 
 
 def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, verification):
     report = {'runId': run_id, 'base': base, 'branch': branch, 'status': 'RUNNING', 'reviews': [], 'checks': []}
-    token = _deadline.set(time.monotonic() + config.get('runTimeoutSeconds', 14400))
-    timeout_token = _agent_timeout.set(config.get('agentTimeoutSeconds', 3600))
+    config_file = project / 'ai-team.config.json'
+    config_hash = sha256_file(config_file) if config_file.is_file() else None
+    max_rounds = config.get('maxReviewRounds', 2)
+    limits = _enter_limits(config)
     save_json(rd / 'result.json', report)
     try:
         context = f'USER TASK:\n{user_prompt}\nBASE REF: {base}\n'
-        triage = _ask(config, project, rd, primary, context +
-                      'Analyze risk without edits. Return ONLY JSON: {"risk":"LOW|MEDIUM|HIGH"}.',
+        triage = _ask(config, project, rd, primary, context + _text(config, 'triage'),
                       'triage', 'triage.json', True)
-        risk = _result(triage, 'risk', {'LOW', 'MEDIUM', 'HIGH'})['risk']
+        risk = _result(triage, 'risk', {'LOW', 'MEDIUM', 'HIGH'}, primary, rd / 'triage.json')['risk']
 
         def require_reviewers(level):
             reviewers = config.get('reviewPolicy', DEFAULT_POLICY)[level]
@@ -226,38 +472,60 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
                 raise RuntimeError('Required reviewers missing: ' + ', '.join(missing))
             return reviewers
 
+        def guard_config():
+            if config_hash and (not config_file.is_file() or sha256_file(config_file) != config_hash):
+                raise RuntimeError('ai-team.config.json changed during the run; the guardrails this '
+                                   'run started under no longer match the file. Review the diff on '
+                                   f'branch {branch} before rerunning.')
+
         require_reviewers(risk)
-        _ask(config, project, rd, primary, context + f'RISK: {risk}\nImplement and test. '
-             'For LOW use a minimal workflow; delegate only when complexity warrants it. '
-             'External reviews are handled by the dispatcher.', 'orchestrator', 'primary.md')
-        for round_number in range(1, config.get('maxReviewRounds', 2) + 1):
+        _ask(config, project, rd, primary, context + f'RISK: {risk}\n' + _text(config, 'implement'),
+             'orchestrator', 'primary.md')
+        guard_config()
+        for round_number in range(1, max_rounds + 1):
             risk = _risk(project, base, risk, config)
             report['risk'] = risk
             reviewers = require_reviewers(risk)
+            patch = _write_diff(project, base, rd)
             reviews = []
             before = _snapshot(project)
             for reviewer in reviewers:
                 filename = f'review-{round_number}-{reviewer}.json'
                 text = _ask(config, project, rd, reviewer, context + f'RISK: {risk}\n'
-                    'Independently review the current working tree including untracked files. '
-                    'Do not read other review reports. Do not edit. ' + VERDICT_PROMPT,
+                    + _text(config, 'review').format(patch=patch, base=base) + _verdict_prompt(config),
                     'reviewer', filename, True)
-                result = _result(text, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'})
+                result = _result(text, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'},
+                                 reviewer, rd / filename)
                 report['reviews'].append({'provider': reviewer, 'round': round_number, **result})
                 reviews.append((filename, result))
             if not any(result['verdict'] == 'CHANGES_REQUIRED' for _, result in reviews):
                 break
-            if round_number == config.get('maxReviewRounds', 2):
-                raise RuntimeError('Unresolved review findings; maxReviewRounds reached')
-            _ask(config, project, rd, primary, context + 'Resolve review findings with evidence. Reports:\n' +
+            if round_number == max_rounds:
+                report['status'] = 'CHANGES_REQUIRED'
+                report['unresolved'] = [x for _, result in reviews for x in result['unresolved']]
+                report['note'] = ('maxReviewRounds reached with unresolved findings. The work is on '
+                                  f'branch {branch}; continue with: ai-team resume {run_id} '
+                                  '--extra-rounds 1')
+                return 2
+            integrator = config.get('roleProviders', {}).get('integrator', primary)
+            _ask(config, project, rd, integrator, context + _text(config, 'integrate') +
                  '\n'.join(str(rd / name) for name, _ in reviews), 'integrator', f'integration-{round_number}.md')
+            guard_config()
             if before == _snapshot(project):
                 raise RuntimeError('Review findings remain unresolved; integrator made no changes')
-        final = _ask(config, project, rd, primary, context +
-                     'Verify the final requirement and diff without edits. The runner executes configured checks. ' +
-                     VERDICT_PROMPT, 'verifier', 'final-verification.md', True)
-        verdict = _result(final, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'})
+        if risk == 'LOW' and report['reviews'] and config.get('skipFinalVerificationAtLow', True):
+            # An independent reviewer already passed; a second primary-run opinion adds cost, not safety.
+            verdict = {'verdict': 'PASS', 'unresolved': [],
+                       'summary': 'LOW risk accepted on the independent review; '
+                                  'final verification skipped by skipFinalVerificationAtLow'}
+        else:
+            final = _ask(config, project, rd, primary, context +
+                         _text(config, 'verify').format(patch=rd / 'diff.patch') + _verdict_prompt(config),
+                         'verifier', 'final-verification.md', True)
+            verdict = _result(final, 'verdict', {'PASS', 'PASS_WITH_NOTES', 'CHANGES_REQUIRED'},
+                              primary, rd / 'final-verification.md')
         report['verification'] = verdict
+        guard_config()
         check_snapshot = _snapshot(project)
         for i, command in enumerate(verification.get('commands', [])):
             rc = _capture(command['argv'], project_path(project, command.get('cwd', '.')),
@@ -284,9 +552,11 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
         raise
     finally:
         save_json(rd / 'result.json', report)
-        _deadline.reset(token)
-        _agent_timeout.reset(timeout_token)
+        for var, token in limits:
+            var.reset(token)
         print(f"Run: {run_id}\nBranch: {branch}\nStatus: {report['status']}\nReports: {rd}")
+        if report.get('note'):
+            print(report['note'])
 
 
 def run_team(project, user_prompt):
@@ -295,11 +565,18 @@ def run_team(project, user_prompt):
     primary = config.get('primaryProvider', 'agy')
     if not which(primary):
         raise RuntimeError(f'Missing primary CLI: {primary}')
+    # Risk escalates from the real diff, so every level's reviewers must be present up front:
+    # discovering a missing CLI after the implementation stage wastes the whole run.
+    missing = sorted({x for reviewers in config.get('reviewPolicy', DEFAULT_POLICY).values()
+                      for x in reviewers if not which(x)})
+    if missing:
+        raise RuntimeError('Reviewer CLI missing and may be required after risk escalation: '
+                           + ', '.join(missing))
     state = load_json(project / '.ai-team/state.json')
     if state.get('conflicts'):
         raise RuntimeError('Resolve installation conflicts before running')
     if config.get('requireCleanWorkingTree', True) and _git(project, 'status', '--porcelain').stdout.strip():
-        raise RuntimeError('Working tree nie jest czysty. Review and commit/stash your changes.')
+        raise RuntimeError('Working tree is not clean. Review and commit/stash your changes.')
     verification = config.get('verification', {})
     if not verification.get('commands') and not verification.get('noChecksReason', '').strip():
         raise RuntimeError('Configure verification.commands or explicit verification.noChecksReason')
@@ -313,15 +590,65 @@ def run_team(project, user_prompt):
     (rd / 'prompt.txt').write_text(user_prompt, encoding='utf-8')
     project_path(project, '.ai/latest.txt').write_text(run_id, encoding='utf-8')
     branch = current
-    if config.get('createBranchForEachRun', True):
-        branch = config.get('branchPrefix', 'ai/') + run_id
+    prefix = config.get('branchPrefix', 'ai/')
+    reuse = config.get('reuseBranchForFollowUp', False) and current.startswith(prefix)
+    if config.get('createBranchForEachRun', True) and not reuse:
+        branch = prefix + run_id
         _git(project, 'switch', '-c', branch)
     (rd / 'base-ref.txt').write_text(base, encoding='utf-8')
     (rd / 'branch.txt').write_text(branch, encoding='utf-8')
     return _execute(project, config, rd, run_id, base, branch, user_prompt, primary, verification)
 
 
-def resume_team(project, run_id):
+def runs(project):
+    """Branch-per-run accumulates; show what each branch holds. Deleting stays the user's call."""
+    project = ensure_git_repo(project.resolve())
+    root = project_path(project, '.ai/runs')
+    if not root.is_dir():
+        print('No runs recorded')
+        return 0
+    current = _git(project, 'branch', '--show-current').stdout.strip()
+    stale = []
+    for directory in sorted(root.iterdir()):
+        if not directory.is_dir():
+            continue
+        result = load_json(directory / 'result.json') if (directory / 'result.json').exists() else {}
+        branch = _read(directory / 'branch.txt').strip() or result.get('branch', '')
+        exists = branch and not _git(project, 'rev-parse', '--verify', branch, check=False).returncode
+        base = _read(directory / 'base-ref.txt').strip() or result.get('base', '')
+        changed = ''
+        if exists and base:
+            # The runner never commits, so the checked-out branch's work is in the working tree.
+            if branch == current:
+                names = set(_git(project, 'diff', '--name-only', base, check=False).stdout.split())
+                names.update(_git(project, 'ls-files', '--others', '--exclude-standard').stdout.split())
+            else:
+                names = set(_git(project, 'diff', '--name-only', base, branch, check=False).stdout.split())
+            changed = f'{len(names)} file(s)' if names else 'no changes'
+            if not names and branch != current:
+                stale.append(branch)
+        marker = '*' if branch == current else ' '
+        print(f"{marker} {directory.name}  {result.get('status', 'UNKNOWN'):<17} "
+              f"{branch or '(no branch)'}  {'missing' if branch and not exists else changed}")
+    if stale:
+        print('\nBranches with no changes against their base:')
+        print('  git branch -d ' + ' '.join(stale))
+    return 0
+
+
+def _reopen_last_round(rd, extra_rounds):
+    """Drop the final round's cached answers so resume can actually retry it."""
+    rounds = sorted({int(p.name.split('-')[1]) for p in rd.glob('review-*-*.json')
+                     if p.name.split('-')[1].isdigit()})
+    if not rounds:
+        return
+    last = rounds[-1]
+    for path in list(rd.glob(f'review-{last}-*')) + list(rd.glob(f'integration-{last}.*')):
+        path.unlink()
+    print(f'Reopened review round {last} for {extra_rounds} additional round(s)')
+
+
+def resume_team(project, run_id, extra_rounds=0):
     project = ensure_git_repo(project.resolve())
     if run_id == 'latest':
         marker = project_path(project, '.ai/latest.txt')
@@ -340,4 +667,7 @@ def resume_team(project, run_id):
     primary = config.get('primaryProvider', 'agy')
     if not which(primary):
         raise RuntimeError(f'Missing primary CLI: {primary}')
+    if extra_rounds:
+        config['maxReviewRounds'] = config.get('maxReviewRounds', 2) + extra_rounds
+        _reopen_last_round(rd, extra_rounds)
     return _execute(project, config, rd, run_id, base, branch, _read(prompt_file), primary, config.get('verification', {}))

@@ -1,81 +1,510 @@
 # AI Engineering Team
 
-AI Engineering Team installs a provider-neutral agent workflow into an existing Git repository. One CLI implements changes; distinct CLIs review medium- and high-risk work. The runner records model output, executed checks, and final status under `.ai/runs/<run-id>/`.
+[English](README.md) | [Polski](README.pl.md)
 
-`primaryProvider` can be `agy`, `codex`, or `claude`. The primary cannot review its own work. `MEDIUM` requires at least one distinct reviewer and `HIGH` at least two.
+[![CI](https://github.com/tomaasz/ai-engineering-team/actions/workflows/ci.yml/badge.svg)](https://github.com/tomaasz/ai-engineering-team/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/tomaasz/ai-engineering-team?include_prereleases)](https://github.com/tomaasz/ai-engineering-team/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python: 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-## Quick start
+Cross-platform multi-agent software engineering team orchestrator for Gemini / Google Antigravity, Codex, and Claude Code.
 
-Requires Python 3.10+, Git, the primary provider CLI, and every configured reviewer CLI.
+---
+
+## What It Is
+
+**AI Engineering Team** is a multi-agent orchestration framework for software developers, designed to embed an autonomous, role-specialized software engineering team directly into any Git repository.
+
+Rather than relying on a single prompt or a one-size-fits-all assistant model, AI Engineering Team coordinates specialized agent roles — Architect, Researcher, Implementer, Test Engineer, and Reviewer — combined with automatic risk triage and **independent cross-model verification**.
+
+## The Problem It Solves
+
+- **Verification hallucinations**: Single agents often claim tests pass without actually executing them, or fail to notice regressions in their own solutions.
+- **Cognitive echo-chambers**: A model reviewing its own code reproduces its initial assumptions, overlooking security flaws and architectural degradation.
+- **Repository pollution and breakage risk**: Uncontrolled agents can overwrite uncommitted user work, alter configuration files, force-push branches, or trigger accidental deployments.
+- **Cross-platform headaches**: Script-based agent configurations break frequently when transitioning between Windows, Linux servers, and Remote SSH sessions.
+
+AI Engineering Team solves these issues through:
+1. Enforced isolation on dedicated Git branches (`ai/...`) and requiring a clean working tree.
+2. Routing tasks through an automated **Triage & Risk Gate**: LOW, MEDIUM, HIGH.
+3. Leveraging **external, independent models** (Claude Code and OpenAI Codex) to perform read-only inspection audits before code is finalized.
+4. Protecting user-customized files with checksum tracking and automatic conflict detection during framework updates.
+
+---
+
+## Architecture
+
+### Orchestration Pipeline
+
+```text
+User prompt
+    ↓
+Triage
+    ↓
+Gemini / Antigravity Team
+    ├── Architect
+    ├── Researcher
+    ├── Implementer
+    ├── Test Engineer
+    └── Reviewer
+    ↓
+Risk Gate
+    ├── LOW    → Gemini
+    ├── MEDIUM → + Codex
+    └── HIGH   → + Claude + Codex
+    ↓
+Integrator
+    ↓
+Final Verifier
+    ↓
+Git branch + report
+```
+
+### Model Roles
+
+| Model / CLI | Primary Role | Execution Characteristics |
+| ----------- | ------------ | ------------------------- |
+| **Google Antigravity / Gemini (`agy`)** | Core Team & Orchestration | Primary implementation engine: Architect, Researcher, Implementer, Test Engineer, and Integrator. Operates inside a secure sandbox. |
+| **OpenAI Codex (`codex`)** | Independent Reviewer (MEDIUM & HIGH) | Operates in an ephemeral read-only inspection mode. Analyzes correctness, edge cases, and regressions without visibility into other reviews. |
+| **Anthropic Claude Code (`claude`)** | Independent Reviewer (HIGH) | Operates in strict plan/read-only mode for critical tasks (security, database migrations, auth). Generates evidence reports without modifying files. |
+
+### Why Independent Multi-Model Review?
+
+Different model architectures have distinct training biases, limitations, and blind spots. When a model implements a complex refactoring, it tends to rationalize its own bugs during self-review. Introducing Codex and Claude as independent reviewers creates an adversarial verification dynamic. Reviewers cannot see each other's reports, ensuring an unbiased assessment. The Integrator then verifies every reported concern directly against the codebase.
+
+### Risk Classification
+
+- **LOW**: Minor, fully reversible changes (e.g., typos, local helpers, formatting). Handled entirely by the core Gemini/Antigravity team without external review overhead.
+- **MEDIUM**: Multi-file modifications, new features, public API changes, or significant refactoring. Automatically triggers an independent review by Codex.
+- **HIGH**: Critical modifications: authentication, authorization, cryptography, secrets management, database migrations, infrastructure, or core business logic. Requires dual independent reviews by Claude Code and Codex.
+
+---
+
+## Features
+
+- **Role specialization**: Dedicated agent personas for architecture, research, implementation, testing, integration, and final verification.
+- **Deterministic state tracking**: SHA-256 checksums in `.ai-team/state.json`. Updates never overwrite locally modified files — conflicts are moved to `.ai-team/conflicts/`.
+- **Project context preservation**: `PROJECT_CONTEXT.md`, `ai-team.config.json`, and `.agents/skills/project/` are protected and preserved during updates.
+- **Full cross-platform support**: Native support for Windows 11 (PowerShell) and Linux (bash/zsh), including VS Code Remote SSH.
+- **VS Code integration**: Automatic generation and non-destructive merging of tasks in `.vscode/tasks.json` (prompt execution, doctor diagnostics, updating).
+- **Strict safety model**: No automatic push, merge, or deployment. All work occurs on dedicated `ai/...` branches.
+
+---
+
+## Requirements
+
+- **Python**: 3.10 or newer
+- **Git**: Installed and accessible in `$PATH`
+- **Agent CLI Tools**:
+  - `agy` (Google Antigravity CLI) — **Required** (primary executor)
+  - `codex` (OpenAI Codex CLI) — Optional (recommended for MEDIUM/HIGH reviews)
+  - `claude` (Anthropic Claude Code CLI) — Optional (recommended for HIGH reviews)
+
+> [!NOTE]
+> Log in to `agy`, `claude`, and `codex` interactively in your terminal at least once before running unattended tasks.
+
+---
+
+## Installation
+
+The recommended installation method across all platforms is [`pipx`](https://pypa.github.io/pipx/):
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@<verified-commit-or-release>"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
+```
+
+### Installing a Specific Version
+
+```bash
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.0.0"
+```
+
+### Upgrading
+
+```bash
+pipx upgrade ai-engineering-team
+```
+
+### Developer Installation via SSH (Optional)
+
+```bash
+pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
+```
+
+### Local Repository Installation
+
+**Windows (PowerShell):**
+```powershell
+.\install-local.ps1
+```
+
+**Linux (Bash):**
+```bash
+./install-local.sh
+```
+
+---
+
+## Quick Start
+
+1. Navigate to your target project directory:
+   ```bash
+   cd /path/to/your-project
+   ```
+
+2. Install AI Engineering Team with your chosen profile:
+   ```bash
+   ai-team install . --profile python
+   ```
+
+3. Verify environment configuration:
+   ```bash
+   ai-team doctor .
+   ```
+
+4. Run a task:
+   ```bash
+   ai-team run . "Add CSV export feature with full test coverage"
+   ```
+
+5. Review the created branch and verification report:
+   ```bash
+   git status
+   git diff main
+   cat .ai/runs/<run-id>/final-verification.md
+   ```
+
+---
+
+## Installation Profiles
+
+Profiles determine the set of skills and templates installed:
+
+| Profile | Target Domain | Key Components |
+| ------- | ------------- | -------------- |
+| `core` | Universal baseline | Base agents, code review, task planning, general testing. |
+| `python` | Python applications | Base skills + Python quality, type annotations, pytest standards. |
+| `web` | Web & Frontend | Base skills + browser automation, DOM inspection, UI testing. |
+| `postgres` | Database projects | Base skills + PostgreSQL safety, migrations, lock analysis. |
+| `ocr` | Document processing | Base skills + OCR pipelines, layout parsing, text extraction. |
+| `geneteka` | Genealogical records | Base skills + specialized ETL pipelines for dataset parsing. |
+| `full` | Multi-domain projects | Complete set of all available skills and roles. |
+
+---
+
+## VS Code Integration
+
+During installation, `ai-team` inspects `.vscode/tasks.json`. If it exists, it cleanly appends AI Team tasks without modifying or duplicating user tasks.
+
+### Available Tasks:
+- **`AI Team: Run prompt`**: Prompts for a task description via an input modal and runs `ai-team run`.
+- **`AI Team: Doctor`**: Runs environment diagnostics inside the integrated terminal.
+- **`AI Team: Update`**: Synchronizes project skills and templates with the installed framework version.
+
+To run: `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS) → `Tasks: Run Task` → Select task.
+
+---
+
+## Windows
+
+- Full support on Windows 10/11 using PowerShell 7 or Windows PowerShell 5.1.
+- Ensure Python and Git are present in your `PATH`.
+- File paths are handled cross-platform with normalized path separators.
+
+## Linux
+
+- Full support on Ubuntu, Debian, Fedora, Arch, Alpine, and other distributions.
+- Operates seamlessly in `bash` and `zsh`.
+
+## VS Code Remote SSH
+
+When working on a remote server or container:
+- Install `ai-team` and the agent CLIs (`agy`, `claude`, `codex`) **on the remote machine**.
+- VS Code tasks execute directly in the remote environment, accessing remote files, containers, and development services.
+
+---
+
+## Updating Framework in a Project
+
+To update templates and skills in a project:
+```bash
 cd /path/to/project
-ai-team install . --profile python
+ai-team update .
 ```
 
-Do not assume the existing `v3.0.1` tag contains behavior documented for the current branch. Pin a commit or released version after checking its source.
+- **Protected files**: `PROJECT_CONTEXT.md`, `ai-team.config.json`, and `.agents/skills/project/` are never overwritten.
+- **Conflict handling**: If a template file was modified locally, `ai-team update` preserves your local changes and writes the upstream version to `.ai-team/conflicts/<path>`, preventing accidental data loss.
 
-Complete `PROJECT_CONTEXT.md` and `ai-team.config.json`, resolve installation conflicts, then commit the setup. A typical run requires an initial commit and a clean working tree.
+---
 
-```bash
-ai-team doctor . --probe
-ai-team run . "Add CSV export and tests"
-```
+## Security Model
 
-`doctor` validates static configuration and executable presence. `--probe` invokes provider `--help`; it cannot prove authentication, model access, quota, or permission to execute a real request. Test those directly with each provider.
+> [!WARNING]
+> **Local Code Execution**: AI Engineering Team runs AI models that can generate and execute shell commands, install packages, and modify files on your system.
 
-## Commands
+To protect your system and repositories, the framework enforces:
+1. **No automatic push or merge**: `ai-team` **never** pushes to remote repositories or merges changes into primary branches.
+2. **No automatic deployment**: The runner does not execute deployment scripts or modify production infrastructure.
+3. **Branch isolation**: All work is performed on isolated branches prefixed with `ai/`.
+4. **Sandbox enabled by default**: Antigravity runs with `"sandbox": true`.
+5. **Full Auto disabled by default**: `"fullAuto": false` prevents permission bypassing (`--dangerously-skip-permissions`). Only enable this inside isolated containers.
+6. **Read-only external reviewers**: Reviewer agents (`claude`, `codex`) run in strict read-only / plan-only mode and cannot modify files.
+
+See [SECURITY.md](SECURITY.md) for full security policies and vulnerability reporting.
+
+---
+
+## Project Bootstrap (Initialization Prompts)
+
+If you want an autonomous agent to configure AI Engineering Team in a new or existing repository, paste one of the following prompts into its interface.
+
+### English Prompt (EN)
 
 ```text
-ai-team --version
-ai-team profiles
-ai-team install <project> --profile <name>
-ai-team update <project> [--profile <name>]
-ai-team resolve <project> <file> --strategy keep|upstream
-ai-team status <project>
-ai-team doctor <project> [--probe]
-ai-team run <project> "<task>"
-ai-team resume <run-id>|latest <project>
-ai-team uninstall <project> [--dry-run]
+Install and configure the AI Engineering Team framework in this repository from the public repository:
+
+https://github.com/tomaasz/ai-engineering-team
+
+Your goal is not only to install the framework, but to adapt it to this specific project so that later `ai-team run . "<prompt>"` can safely analyze, implement, test, and review changes.
+
+RULES:
+- First, thoroughly inspect the repository.
+- Do not modify application or business logic code during this setup task.
+- Do not run git push, merge, deployment, force push, git reset --hard, or git clean.
+- Do not delete existing project configuration.
+- If AI Engineering Team is already installed, do not reinstall blindly — check `ai-team status .` and use `ai-team update .` when appropriate.
+- Do not guess test, build, or technology commands. Derive them from verified project files.
+- Preserve existing local Skills and AI configuration if present.
+- If any information is uncertain, mark it as unverified instead of inventing a value.
+
+PHASE 1 — PROJECT DISCOVERY
+Inspect the repository and determine:
+1. Operating system and environment you are currently running in;
+2. Programming languages and runtime versions;
+3. Frameworks and libraries;
+4. Package manager and dependency installation workflow;
+5. Project structure and entry points;
+6. Application startup and local dev commands;
+7. Existing test suites (unit, integration, e2e);
+8. Linting, formatting, and type-checking commands;
+9. Build and compilation steps;
+10. Database and migrations workflow;
+11. Docker / container setup;
+12. CI/CD pipelines;
+13. Especially sensitive or risky areas (auth, migrations, data loss points);
+14. Parts of the codebase that agents should never modify without explicit approval.
+
+PHASE 2 — CHECK AI ENGINEERING TEAM
+Run:
+ai-team --help
+ai-team status .
+
+If `ai-team` is unavailable, install it:
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
+
+PHASE 3 — SELECT A PROFILE
+Based on the actual repository contents, choose the most appropriate available AI Engineering Team profile:
+- core
+- python
+- web
+- postgres
+- ocr
+- geneteka
+- full
+
+Choose the smallest profile that sensibly covers the project. If capabilities from multiple domains are needed, choose the closest base profile and add missing capabilities as project-specific Skills rather than installing unnecessary components.
+
+PHASE 4 — INSTALL OR UPDATE
+If not installed:
+ai-team install . --profile <SELECTED_PROFILE>
+
+If already installed:
+ai-team update .
+
+Then run:
+ai-team status .
+ai-team doctor .
+
+PHASE 5 — CUSTOMIZE PROJECT_CONTEXT.md
+Populate `PROJECT_CONTEXT.md` based on verified facts from the repository:
+- Project Purpose
+- Tech Stack
+- Main Verified Commands (install, dev, run, lint, format, typecheck, unit tests, integration tests, build, migrations)
+- Architecture Overview
+- Critical Areas & Failure Points
+- Areas Requiring Explicit Approval
+- Definition of Done
+
+PHASE 6 — PROJECT-SPECIFIC SKILLS
+Determine whether this project needs repository-specific Skills under:
+.agents/skills/project/
+Create them only for knowledge unique to this repository. Do not duplicate generic language rules already provided by standard profiles.
+
+PHASE 7 — REVIEW ai-team.config.json
+Ensure default safety policies remain active:
+- requireCleanWorkingTree: true
+- createBranchForEachRun: true
+- antigravity.sandbox: true
+- antigravity.fullAuto: false
+- No automatic push, merge, or deployment.
+
+PHASE 8 — VALIDATION
+Run:
+ai-team doctor .
+ai-team status .
+git status
+git diff
+
+If safe and fast tests exist, run them to verify the commands recorded in PROJECT_CONTEXT.md.
+
+PHASE 9 — FINAL REPORT
+Provide a concise summary:
+- Detected stack and components
+- Installed profile and version
+- Doctor status
+- Verified commands recorded in PROJECT_CONTEXT.md
+- Project-specific skills created
+- List of created or modified files
+- Conclude with: `AI_TEAM_READY: YES` (or `NO` with specific missing items).
 ```
 
-`update --profile` changes the installed profile. Templates excluded by a smaller profile can remain tracked until `uninstall`; inspect them explicitly.
-
-Existing project files are preserved on collision. Incoming templates are staged under `.ai-team/conflicts/` until explicitly resolved:
-
-```bash
-ai-team resolve . AGENTS.md --strategy keep
-ai-team resolve . AGENTS.md --strategy upstream
-```
-
-`keep` accepts the project copy. `upstream` installs the staged framework copy. Review the diff first. VS Code JSONC is accepted, but merging writes normalized JSON and a backup, so comments and formatting may change.
-
-## Verification and results
-
-Configure real checks as argument arrays with a working directory and timeout. The runner does not infer shell commands.
-
-```json
-{"verification":{"commands":[{"argv":["python","-m","pytest"],"cwd":".","timeoutSeconds":600}]}}
-```
-
-If no safe automated check exists, set a nonempty `verification.noChecksReason`. Such a run can finish only as `PASS_WITH_NOTES`. Missing reviewers, failed reviews, malformed JSON verdicts, failing checks, unresolved findings, and a failed diff check cannot fall back to success.
-
-Decision stages return structured JSON. `.ai/runs/<run-id>/result.json` is the canonical summary; adjacent files contain prompts, answers, stdout, and stderr.
-
-The runner enforces `agentTimeoutSeconds`, `runTimeoutSeconds`, and `maxReviewRounds`. It currently has no token or cost accounting and no automatic resume. A timeout targets the directly started process and may not terminate every descendant on every platform.
-
-## Bootstrap and reference
-
-Give a coding agent this instruction:
+### Polish Prompt (PL)
 
 ```text
-Install and configure AI Engineering Team in this repository by following docs/BOOTSTRAP.md. Inspect the repository first, preserve existing files, use a profile and verification commands supported by project evidence, and report AI_TEAM_READY exactly as specified there.
+Zainstaluj i skonfiguruj w tym repozytorium framework AI Engineering Team z publicznego repozytorium:
+
+https://github.com/tomaasz/ai-engineering-team
+
+Twoim celem jest nie tylko zainstalowanie frameworka, ale przede wszystkim dopasowanie go do tego konkretnego projektu, tak aby później polecenie `ai-team run . "<prompt>"` mogło bezpiecznie analizować, implementować, testować i reviewować zmiany.
+
+ZASADY:
+- Najpierw dokładnie przeanalizuj repozytorium.
+- Nie zmieniaj kodu biznesowego aplikacji podczas tej konfiguracji.
+- Nie wykonuj git push, merge, deployment, force push, git reset --hard ani git clean.
+- Nie usuwaj istniejącej konfiguracji projektu.
+- Jeżeli AI Engineering Team jest już zainstalowany, nie instaluj go ponownie w ciemno — sprawdź `ai-team status .` i w razie potrzeby użyj `ai-team update .`.
+- Nie zgaduj komend testowych, buildów ani technologii. Ustal je z istniejących plików projektu.
+- Zachowaj istniejące lokalne Skills i konfigurację AI, jeśli już istnieją.
+- Jeżeli jakaś informacja jest niepewna, oznacz ją jako niezweryfikowaną zamiast wymyślać wartość.
+
+ETAP 1 — ROZPOZNANIE PROJEKTU
+Przeanalizuj repozytorium i ustal:
+1. System operacyjny i środowisko;
+2. Języki programowania i runtime;
+3. Frameworki i biblioteki;
+4. Package manager i sposób instalowania zależności;
+5. Strukturę projektu i entry points;
+6. Sposób uruchamiania aplikacji w dev;
+7. Istniejące testy (unit, integration, e2e);
+8. Linting, formatowanie i type checking;
+9. Proces budowania (build);
+10. Bazę danych i migracje;
+11. Docker / kontenery;
+12. CI/CD;
+13. Obszary szczególnie ryzykowne (auth, migracje, utrata danych);
+14. Części projektu, których agent nie powinien modyfikować bez wyraźnej zgody.
+
+ETAP 2 — SPRAWDZENIE AI ENGINEERING TEAM
+Sprawdź:
+ai-team --help
+ai-team status .
+
+Jeżeli `ai-team` nie jest dostępny, zainstaluj go:
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
+
+ETAP 3 — DOBÓR PROFILU
+Wybierz optymalny profil AI Engineering Team dla projektu:
+- core
+- python
+- web
+- postgres
+- ocr
+- geneteka
+- full
+
+Wybierz najmniejszy profil, który sensownie pokrywa projekt. Brakujące specyficzne kompetencje dodaj jako project-specific Skills zamiast instalować niepotrzebne komponenty.
+
+ETAP 4 — INSTALACJA LUB AKTUALIZACJA
+Jeżeli framework nie jest zainstalowany:
+ai-team install . --profile <WYBRANY_PROFIL>
+
+Jeżeli jest już zainstalowany:
+ai-team update .
+
+Następnie sprawdź:
+ai-team status .
+ai-team doctor .
+
+ETAP 5 — DOSTOSOWANIE PROJECT_CONTEXT.md
+Uzupełnij `PROJECT_CONTEXT.md` na podstawie faktycznej analizy repozytorium:
+- Cel projektu
+- Stack technologiczny
+- Rzeczywiste, zweryfikowane komendy (install, dev, run, lint, format, typecheck, testy, build, migracje)
+- Architektura
+- Krytyczne obszary
+- Obszary wymagające jawnej zgody
+- Definition of Done
+
+ETAP 6 — PROJEKTOWE SKILLS
+Oceń, czy projekt wymaga własnych Skills w `.agents/skills/project/`. Twórz je tylko dla wiedzy specyficznej dla tego repozytorium.
+
+ETAP 7 — KONFIGURACJA ai-team.config.json
+Zachowaj domyślne reguły bezpieczeństwa:
+- requireCleanWorkingTree: true
+- createBranchForEachRun: true
+- antigravity.sandbox: true
+- antigravity.fullAuto: false
+- Brak automatycznego push, merge i deployment.
+
+ETAP 8 — WALIDACJA
+Uruchom:
+ai-team doctor .
+ai-team status .
+git status
+git diff
+
+Jeżeli istnieją bezpieczne, szybkie testy projektu, uruchom je w celu potwierdzenia komend z PROJECT_CONTEXT.md.
+
+ETAP 9 — RAPORT KOŃCOWY
+Przedstaw krótki raport końcowy:
+- Wykryty stack i komponenty
+- Wybrany profil i wersja
+- Status doctor
+- Zapisane komendy i ograniczenia bezpieczeństwa
+- Utworzone Skills projektowe
+- Lista zmienionych plików
+- Zakończ jednoznacznym: `AI_TEAM_READY: YES` (lub `NO` z listą braków).
 ```
 
-- [Bootstrap prompts](docs/BOOTSTRAP.md)
-- [Installation](docs/INSTALL.md)
-- [Configuration](docs/CONFIGURATION.md)
-- [Architecture](docs/ARCHITECTURE.md)
+---
 
-Reviews use read-only provider modes plus filesystem snapshots, but all agents operate against the same repository. Their isolation is partly prompt-enforced, not a separate machine boundary. Risk escalation uses changed filenames and configurable globs; it is heuristic and needs conservative project-specific rules for sensitive repositories.
+## Development
+
+Clone the repository and install in editable mode with development dependencies:
+```bash
+git clone https://github.com/tomaasz/ai-engineering-team.git
+cd ai-engineering-team
+python -m pip install -e ".[dev]"
+```
+
+Run test suite:
+```bash
+pytest -v
+```
+
+Build package:
+```bash
+python -m build
+```
+
+---
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards, testing requirements, and the pull request process.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

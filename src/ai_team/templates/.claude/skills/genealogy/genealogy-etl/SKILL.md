@@ -1,7 +1,7 @@
 ---
 name: genealogy-etl
-description: ETL genealogiczny i proweniencja.
+description: Genealogical ETL and provenance.
 ---
 # genealogy-etl
 
-Zachowuj źródło i surowe dane. Nie nadpisuj oryginalnej pisowni normalizacją. Import powinien być idempotentny.
+Keep the source and the raw data. Do not overwrite the original spelling with a normalized form. Imports must be idempotent.

@@ -1,9 +1,12 @@
 # Security Policy
 
+**English** · [Polski](SECURITY.pl.md)
+
 ## Supported Versions
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 4.0.x   | :white_check_mark: |
 | 3.0.x   | :white_check_mark: |
 | < 3.0   | :x:                |
 
@@ -48,4 +51,10 @@ AI Engineering Team is an orchestrator that interacts with external AI CLI tools
 ### Sensitive Information & Secrets
 - Never pass private API tokens, passwords, `.env` files, or production credentials to agent prompts or commits.
 - Ensure project `.gitignore` files exclude all credential formats (`.env`, `*.pem`, `*.key`, `.ai/runs/`).
+- Subprocess environments are sanitized: variables matching credential patterns, connection strings (`_URL`, `_URI`, `_DSN`), agent sockets, and static blocklist entries (`KUBECONFIG`, `AWS_PROFILE`, ...) are stripped. Provider API keys needed by CLIs can be listed in `passthroughEnv`.
+- **Environment filtering is not container isolation.** Agents run with the invoking user's privileges and can read `~/.aws/credentials`, `~/.ssh/`, and `.env` directly from disk. Use containers or virtual machines when this is a concern.
 
+### Guardrails
+- Files defining how the team reviews code (`ai-team.config.json`, `AI_TEAM.md`, `PROJECT_CONTEXT.md`, `.agents/**`, `.claude/**`) always escalate to HIGH risk and cannot pass unreviewed.
+- Modifying `ai-team.config.json` during a run aborts the run.
+- `verification.commands` execute with user privileges. Re-introducing shells in `argv[0]` is rejected without `allowShellWrapper`, but any interpreter can still run code: treat `ai-team.config.json` as trusted, reviewed configuration.

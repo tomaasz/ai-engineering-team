@@ -1,1 +1,1 @@
-{"include":["AI_TEAM.md","AGENTS.md","CLAUDE.md","GEMINI.md","PROJECT_CONTEXT.md","ai-team.config.json",".vscode/tasks.json",".agents/agents",".agents/skills/core",".agents/skills/project",".claude/agents",".claude/skills/core"]}
+{"include": ["AI_TEAM.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md", "PROJECT_CONTEXT.md", "ai-team.config.json", ".vscode/tasks.json", ".agents/agents", ".agents/skills/core", ".agents/skills/project", ".claude/skills/project", ".claude/agents", ".claude/skills/core"]}

@@ -1,7 +1,7 @@
 ---
 name: postgres
-description: Bezpieczne zmiany PostgreSQL.
+description: Safe PostgreSQL changes.
 ---
 # postgres
 
-Sprawdź kompatybilność, blokady, wielkość tabeli, backfill, indeksy, transakcję, rollback i wpływ na zapytania.
+Check compatibility, locks, table size, backfill, indexes, the transaction, the rollback and the impact on queries.

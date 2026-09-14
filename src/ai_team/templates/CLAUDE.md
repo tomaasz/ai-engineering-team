@@ -1,4 +1,4 @@
 # Claude Code
-Przeczytaj `AI_TEAM.md` i `PROJECT_CONTEXT.md`.
-Claude jest przede wszystkim niezależnym reviewerem/debuggerem.
-Przy review nie edytuj kodu; najpierw sformułuj własne wnioski; podawaj konkretne dowody.
+Read `AI_TEAM.md` and `PROJECT_CONTEXT.md`.
+Claude is primarily an independent reviewer and debugger.
+When reviewing, do not edit code; form your own conclusions first; give concrete evidence.

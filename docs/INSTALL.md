@@ -1,15 +1,17 @@
 # Installation
 
+**English** · [Polski](INSTALL.pl.md)
+
 ## Central CLI
 
-Install Python 3.10+, Git, and `pipx`, then install a revision you have inspected:
+Install Python 3.10+, Git, and `pipx`, then install the verified release:
 
 ```bash
-pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@<verified-commit-or-release>"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.0.0"
 ai-team --version
 ```
 
-Do not present the existing `v3.0.1` tag as containing unreleased changes from the current branch. Pin the reviewed commit or a release created from it. Upgrading the CLI and updating project templates are separate actions:
+Do not tag an unreleased commit as a release. Updating the CLI and updating project templates are separate operations:
 
 ```bash
 pipx upgrade ai-engineering-team
@@ -18,16 +20,18 @@ ai-team update /path/to/project
 
 For local development, use `./install-local.sh` on Linux or `.\install-local.ps1` on Windows.
 
-## Project setup
+## Project Setup
 
 ```bash
 ai-team profiles
-ai-team install . --profile core
+ai-team install . --profile core --lang en
 ```
 
-Packaged profiles include `core`, `python`, `web`, `postgres`, `ocr`, `geneteka`, and `full`. A profile selects templates and skills; it does not discover the stack or prove commands are correct.
+Available profiles: `core`, `python`, `web`, `postgres`, `ocr`, `geneteka`, and `full`. The profile selects templates and skills; it does not automatically inspect the stack or verify commands.
 
-Installation preserves existing files. On collision it keeps the project copy, stages the incoming template in `.ai-team/conflicts/<path>`, and records a conflict. Local configuration (`PROJECT_CONTEXT.md`, `ai-team.config.json`, and `.agents/skills/project/`) is preserved on updates.
+`--lang` selects the language for installed agent instructions and skills (`en` default or `pl`). Only one language version is installed in a project, and the runner forms prompts in that same language. The chosen language is stored in `.ai-team/state.json` and as `language` in `ai-team.config.json`; `ai-team update . --lang pl` switches both.
+
+Installation preserves existing files. On collision, the project version is kept, the incoming template is stored under `.ai-team/conflicts/<path>`, and the conflict is tracked. Local configuration (`PROJECT_CONTEXT.md`, `ai-team.config.json`, `.agents/skills/project/`, `.claude/skills/project/`) is never overwritten during updates.
 
 ```bash
 ai-team status .
@@ -36,20 +40,20 @@ ai-team resolve . AGENTS.md --strategy keep
 ai-team resolve . AGENTS.md --strategy upstream
 ```
 
-`keep` accepts the project file. `upstream` installs the staged template. Neither performs a semantic merge; compare both copies first.
+`keep` retains the project file. `upstream` overwrites with the incoming template. Neither performs semantic three-way merging; diff both copies first.
 
-VS Code tasks are merged by identifiers. JSONC comments and trailing commas can be read, but a successful merge creates a backup and writes normalized JSON, so formatting and comments may be lost.
+VS Code tasks are merged by task and input identifiers. JSONC comments and trailing commas are parsed, but a successful merge normalizes JSON and backs up the original.
 
-Change profile during update with `ai-team update . --profile web`. Files retired by a smaller profile can remain tracked until `uninstall`; review them when changing profiles.
+Profile changes can be applied via `ai-team update . --profile web`.
 
 ## Readiness
 
-Complete `PROJECT_CONTEXT.md` and configure real verification commands or an explicit `noChecksReason`. Review and commit installation changes. With default settings, `run` requires a clean working tree, an initial commit, and no unresolved conflicts.
+Complete `PROJECT_CONTEXT.md` — `doctor` reports unresolved `TODO` items as problems — and configure real verification commands or an explicit `noChecksReason`. If provider CLIs authenticate via environment variables, declare them in `passthroughEnv`; otherwise, credentials are stripped from child processes. Review and commit installation changes. By default, `run` requires a clean working tree, an initial commit, and no unresolved conflicts.
 
 ```bash
 ai-team doctor . --probe
 ```
 
-`doctor` checks configuration, Git state, executable paths, conflicts, and verification presence. `--probe` only invokes CLI help. It cannot validate login, credentials, model availability, quota, network access, or permissions. Run a harmless real request through each configured provider before reporting full readiness.
+`doctor` verifies configuration, Git repository state, executable paths, conflicts, verification setup, and `TODO` placeholders in `PROJECT_CONTEXT.md`. `--probe` runs `--help` on CLIs. It does not verify authentication, model quotas, or network connectivity.
 
-Remote SSH installations need `ai-team` and provider CLIs installed on the remote host.
+Remote SSH setups require `ai-team` and provider CLIs installed on the remote host.

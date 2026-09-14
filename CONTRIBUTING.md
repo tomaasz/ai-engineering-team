@@ -1,5 +1,7 @@
 # Contributing to AI Engineering Team
 
+**English** · [Polski](CONTRIBUTING.pl.md)
+
 Thank you for your interest in contributing to AI Engineering Team! This document provides guidelines and instructions for contributing to this project.
 
 ---
@@ -61,6 +63,17 @@ Before submitting a pull request, ensure:
    ```bash
    python -m build
    ```
+
+### Documentation is part of the test suite
+
+The test suite validates documentation consistency with code, as they previously drifted apart:
+
+- Every key in `templates/ai-team.config.json` and in `antigravity` must be documented in `docs/CONFIGURATION.md`.
+- Both prompt versions in `docs/BOOTSTRAP.md` must cover settings critical for bootstrap.
+- Every human-facing document requires a `.pl.md` counterpart with the same heading structure and reciprocal link.
+- Every template in `templates/` requires a `.pl.md` variant.
+
+When adding a configuration option or document, update both language versions in the same PR.
 
 ---
 

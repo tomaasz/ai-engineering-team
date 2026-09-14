@@ -1,7 +1,7 @@
 ---
 name: testing
-description: Dobiera i uruchamia testy proporcjonalnie do zmiany.
+description: Chooses and runs tests in proportion to the change.
 ---
 # testing
 
-Czytaj komendy z PROJECT_CONTEXT.md. Raportuj komendę, exit code, wynik i pominięte testy. Po poprawce uruchom test ponownie.
+Read the commands from PROJECT_CONTEXT.md. Report the command, the exit code, the result and any skipped tests. Rerun the test after a fix.

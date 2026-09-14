@@ -91,10 +91,10 @@ def test_missing_review_never_falls_back(project, monkeypatch):
     configure(project, availabilityFallback=True)
     calls = mock_agents(monkeypatch, 'HIGH')
     monkeypatch.setattr(runner, 'which', lambda x: None if x == 'claude' else x)
-    with pytest.raises(RuntimeError, match='Required reviewers missing'):
+    with pytest.raises(RuntimeError, match='Reviewer CLI missing'):
         runner.run_team(project, 'Task')
-    assert not any(role == 'orchestrator' for _, role in calls)
-    assert report(project)['status'] == 'FAILED'
+    assert not calls, 'readiness is checked before any model is paid for'
+    assert not (project / '.ai/latest.txt').exists()
 
 
 def test_failed_reviewer_stops_run(project, monkeypatch):
@@ -144,8 +144,8 @@ def test_review_round_limit_blocks_unresolved_findings(project, monkeypatch):
         if role == 'reviewer':
             return json.dumps({'verdict': 'CHANGES_REQUIRED', 'unresolved': ['bug'], 'summary': 'bug'})
     mock_agents(monkeypatch, 'MEDIUM', effect)
-    with pytest.raises(RuntimeError, match='maxReviewRounds'):
-        runner.run_team(project, 'Task')
+    assert runner.run_team(project, 'Task') == 2
+    assert report(project)['status'] == 'CHANGES_REQUIRED'
 
 
 @pytest.mark.parametrize('value', ['VERDICT: PASS', '{"verdict":"PASS"}', '{"verdict":"PASS","unresolved":["bug"],"summary":"x"}'])
@@ -154,14 +154,16 @@ def test_unstructured_or_contradictory_verdict_rejected(value):
         runner._result(value, 'verdict', {'PASS'})
 
 
-def test_readonly_stage_mutations_detected(project, tmp_path, monkeypatch):
-    def capture(cmd, cwd, out, err, allow_failure=False):
+def test_readonly_stage_mutations_detected(project, monkeypatch):
+    rd = project / '.ai/runs/stage-test'
+    rd.mkdir(parents=True)
+    def capture(cmd, cwd, out, err, allow_failure=False, timeout=None):
         (project / 'README.md').write_text('unauthorized\n', encoding='utf-8')
         out.write_text('{}', encoding='utf-8')
         return 0
     monkeypatch.setattr(runner, '_capture', capture)
-    with pytest.raises(RuntimeError, match='Read-only stage'):
-        runner._ask({}, project, tmp_path, 'agy', 'task', 'verifier', 'answer.json', True)
+    with pytest.raises(RuntimeError, match='read-only but modified project files'):
+        runner._ask({}, project, rd, 'agy', 'task', 'verifier', 'answer.json', True)
 
 
 def test_codex_readonly_explicit_and_final_answer_path(tmp_path):
@@ -184,8 +186,8 @@ def test_monorepo_command_cwd(project, monkeypatch):
 
 
 @pytest.mark.parametrize('provider,policy', [
-    ('codex', {'LOW': [], 'MEDIUM': ['claude'], 'HIGH': ['agy', 'claude']}),
-    ('claude', {'LOW': [], 'MEDIUM': ['codex'], 'HIGH': ['agy', 'codex']}),
+    ('codex', {'LOW': ['claude'], 'MEDIUM': ['claude'], 'HIGH': ['agy', 'claude']}),
+    ('claude', {'LOW': ['codex'], 'MEDIUM': ['codex'], 'HIGH': ['agy', 'codex']}),
 ])
 def test_alternative_primary_provider(project, monkeypatch, provider, policy):
     configure(project, primaryProvider=provider, reviewPolicy=policy)

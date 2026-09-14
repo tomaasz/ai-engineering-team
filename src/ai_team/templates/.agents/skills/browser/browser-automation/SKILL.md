@@ -1,7 +1,7 @@
 ---
 name: browser-automation
-description: Stabilna automatyzacja przeglądarki.
+description: Stable browser automation.
 ---
 # browser-automation
 
-Preferuj role/label/test-id nad pozycją DOM. Czekaj na stan zamiast arbitralnego sleep. Retry tylko gdy bezpieczny.
+Prefer role, label or test-id over DOM position. Wait for a state instead of an arbitrary sleep. Retry only when it is safe.

@@ -1,14 +1,20 @@
 {
   "requireCleanWorkingTree": true,
   "createBranchForEachRun": true,
+  "reuseBranchForFollowUp": false,
   "branchPrefix": "ai/",
+  "language": "en",
   "primaryProvider": "agy",
   "models": {},
+  "providerArgs": {},
+  "roleProviders": {},
   "agentTimeoutSeconds": 3600,
   "runTimeoutSeconds": 14400,
   "maxReviewRounds": 2,
   "verification": {"commands": [], "noChecksReason": ""},
   "riskPaths": {"HIGH": [], "MEDIUM": []},
+  "passthroughEnv": [],
+  "protectedIgnoredPaths": [".env", ".env.*", "*.pem", "*.key"],
   "antigravity": {
     "triageEffort": "low",
     "implementationEffort": "high",
@@ -18,9 +24,10 @@
     "printTimeout": "60m"
   },
   "reviewPolicy": {
-    "LOW": [],
+    "LOW": ["codex"],
     "MEDIUM": ["codex"],
     "HIGH": ["claude", "codex"]
   },
-  "availabilityFallback": false
+  "skipFinalVerificationAtLow": true,
+  "allowUnreviewedLowRisk": false
 }

@@ -1,7 +1,7 @@
 ---
 name: ocr-pipeline
-description: Pipeline OCR i ewaluacja.
+description: OCR pipeline and evaluation.
 ---
 # ocr-pipeline
 
-Zachowuj obraz źródłowy. Rozdziel preprocessing, layout, OCR/HTR i postprocessing. Mierz jakość na stałym zestawie.
+Keep the source image. Separate preprocessing, layout, OCR/HTR and postprocessing. Measure quality on a fixed set.

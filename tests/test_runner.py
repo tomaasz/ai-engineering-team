@@ -1,38 +1,14 @@
+import json
 import re
 import subprocess
-import sys
-import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
 
-from ai_team.runner import doctor, run_team, resume_team, _agy, _capture
-from ai_team.installer import install as framework_install
+from ai_team.runner import doctor, run_team, _agy
+from ai_team.installer import install
 from ai_team.utils import save_json, load_json
 
-
-def install(path, profile):
-    framework_install(path, profile)
-    cfg = load_json(path / 'ai-team.config.json')
-    cfg['verification'] = {'commands': [], 'noChecksReason': 'Fixture repository contains documentation only'}
-    save_json(path / 'ai-team.config.json', cfg)
-
-
-def structured_output(out, cmd):
-    """Fixtures emulate provider final-answer transport, not progress logs."""
-    import json
-    text = out.read_text(encoding='utf-8')
-    if text.startswith('RISK:'):
-        result = {'risk': text.split()[1]}
-    elif text.startswith('VERDICT:'):
-        result = {'verdict': text.split()[1], 'unresolved': [], 'summary': text}
-    elif cmd[0] in {'codex', 'claude'}:
-        result = {'verdict': 'PASS', 'unresolved': [], 'summary': text}
-    else:
-        return
-    out.write_text(json.dumps(result), encoding='utf-8')
-    if '--output-last-message' in cmd:
-        Path(cmd[cmd.index('--output-last-message') + 1]).write_text(json.dumps(result), encoding='utf-8')
 
 def init_git_repo(path: Path):
     subprocess.run(["git", "init", "-b", "main"], cwd=path, check=True, capture_output=True)
@@ -44,16 +20,27 @@ def init_git_repo(path: Path):
     subprocess.run(["git", "add", "README.md"], cwd=path, check=True, capture_output=True)
     subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "initial commit"], cwd=path, check=True, capture_output=True)
 
+
+def _setup_installed_repo(path: Path):
+    init_git_repo(path)
+    install(path, "core")
+    (path / "PROJECT_CONTEXT.md").write_text("# Test Project\nContext ready without placeholders.\n", encoding="utf-8")
+    cfg_file = path / "ai-team.config.json"
+    cfg = load_json(cfg_file)
+    cfg["verification"]["noChecksReason"] = "test suite running mock verification"
+    save_json(cfg_file, cfg)
+    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "install ai-team and configure"], cwd=path, check=True, capture_output=True)
+
+
 def test_doctor_success(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(['git', 'add', '.'], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(['git', 'commit', '-m', 'setup'], cwd=tmp_path, check=True, capture_output=True)
+    _setup_installed_repo(tmp_path)
 
     with patch("ai_team.runner.which") as mock_which:
         mock_which.side_effect = lambda cmd: f"/usr/bin/{cmd}"
         result = doctor(tmp_path)
         assert result == 0
+
 
 def test_doctor_missing_required_cli(tmp_path):
     init_git_repo(tmp_path)
@@ -65,70 +52,85 @@ def test_doctor_missing_required_cli(tmp_path):
         result = doctor(tmp_path)
         assert result == 1
 
+
 def test_agy_command_builder():
     config = {
         "antigravity": {
-            "model": "gemini-test",
-            "sandbox": True,
+            "model": "gemini-2.5-pro",
             "fullAuto": False,
-            "printTimeout": "30m"
+            "sandbox": True
         }
     }
-    cmd = _agy(config, "test prompt", "architect", "high")
-    assert "agy" in cmd
+    cmd = _agy(config, "prompt text", agent="orchestrator", effort="high")
+
+    assert cmd[0] == "agy"
     assert "-p" in cmd
-    assert "test prompt" in cmd
+    assert "prompt text" in cmd
     assert "--agent" in cmd
-    assert "architect" in cmd
-    assert "--model" in cmd
-    assert "gemini-test" in cmd
+    assert "orchestrator" in cmd
     assert "--effort" in cmd
     assert "high" in cmd
+    assert "--model" in cmd
+    assert "gemini-2.5-pro" in cmd
     assert "--sandbox" in cmd
     assert "--dangerously-skip-permissions" not in cmd
+
 
 def test_agy_command_builder_full_auto():
     config = {
         "antigravity": {
-            "sandbox": False,
-            "fullAuto": True
+            "model": "gemini-2.5-flash",
+            "fullAuto": True,
+            "sandbox": False
         }
     }
-    cmd = _agy(config, "prompt", "implementer", "low")
+    cmd = _agy(config, "prompt text", agent="developer", effort=None)
+
     assert "--dangerously-skip-permissions" in cmd
     assert "--sandbox" not in cmd
 
+
 def test_run_team_dirty_working_tree_raises(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
+    _setup_installed_repo(tmp_path)
 
     # Dirty the working tree
     (tmp_path / "dirty.txt").write_text("uncommitted", encoding="utf-8")
 
     with patch("ai_team.runner.which", return_value="/usr/bin/tool"):
-        with pytest.raises(RuntimeError, match="Working tree nie jest czysty"):
+        with pytest.raises(RuntimeError, match="Working tree"):
             run_team(tmp_path, "test task")
 
+
 def test_run_team_triage_routing_low(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    # Commit installation so working tree is clean
+    _setup_installed_repo(tmp_path)
+    cfg_file = tmp_path / "ai-team.config.json"
+    cfg = load_json(cfg_file)
+    cfg["reviewPolicy"]["LOW"] = []
+    cfg["allowUnreviewedLowRisk"] = True
+    save_json(cfg_file, cfg)
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "install ai-team"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "allow unreviewed low risk"], cwd=tmp_path, check=True, capture_output=True)
 
     called_commands = []
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False):
         called_commands.append(cmd)
         out.parent.mkdir(parents=True, exist_ok=True)
-        # Check if triage
-        if "triage" in cmd:
-            out.write_text("RISK: LOW\nAnalysis: simple typo fix", encoding="utf-8")
-        elif "verifier" in cmd:
-            out.write_text("VERDICT: PASS\nAll tests passed", encoding="utf-8")
+        filename = out.name
+        if "triage" in filename:
+            out.write_text(json.dumps({"risk": "LOW"}), encoding="utf-8")
+        elif "verif" in filename:
+            out.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "All tests passed"}), encoding="utf-8")
+        elif "--output-last-message" in cmd:
+            idx = cmd.index("--output-last-message")
+            output_file = Path(cmd[idx + 1])
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "Reviewed"}), encoding="utf-8")
+            out.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "Reviewed"}), encoding="utf-8")
+        elif "review" in filename or "claude" in str(cmd):
+            out.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "Reviewed"}), encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
-        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -137,30 +139,34 @@ def test_run_team_triage_routing_low(tmp_path):
         code = run_team(tmp_path, "Fix typo in readme")
         assert code == 0
 
-        # In LOW risk: no external reviewer (neither claude nor codex) should be called
+        # In LOW risk: no external reviewer should be called
         assert not any("claude" in cmd for cmd in called_commands)
         assert not any("codex" in cmd for cmd in called_commands)
 
+
 def test_run_team_triage_routing_medium(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "install ai-team"], cwd=tmp_path, check=True, capture_output=True)
+    _setup_installed_repo(tmp_path)
 
     called_commands = []
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False):
         called_commands.append(cmd)
         out.parent.mkdir(parents=True, exist_ok=True)
-        if "triage" in cmd:
-            out.write_text("RISK: MEDIUM\nFeature addition", encoding="utf-8")
-        elif "codex" in cmd:
-            out.write_text("Codex Review: Looks good", encoding="utf-8")
-        elif "verifier" in cmd:
-            out.write_text("VERDICT: PASS\nVerified", encoding="utf-8")
+        filename = out.name
+        if "triage" in filename:
+            out.write_text(json.dumps({"risk": "MEDIUM"}), encoding="utf-8")
+        elif "--output-last-message" in cmd:
+            idx = cmd.index("--output-last-message")
+            output_file = Path(cmd[idx + 1])
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "Codex Review: Looks good"}), encoding="utf-8")
+            out.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "Codex Review: Looks good"}), encoding="utf-8")
+        elif "verif" in filename:
+            out.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "Verified"}), encoding="utf-8")
+        elif "review" in filename or "claude" in str(cmd):
+            out.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "Looks good"}), encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
-        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -173,28 +179,30 @@ def test_run_team_triage_routing_medium(tmp_path):
         assert any("codex" in cmd for cmd in called_commands)
         assert not any("claude" in cmd for cmd in called_commands)
 
+
 def test_run_team_triage_routing_high(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "install ai-team"], cwd=tmp_path, check=True, capture_output=True)
+    _setup_installed_repo(tmp_path)
 
     called_commands = []
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False):
         called_commands.append(cmd)
         out.parent.mkdir(parents=True, exist_ok=True)
-        if "triage" in cmd:
-            out.write_text("RISK: HIGH\nAuth change", encoding="utf-8")
-        elif "claude" in cmd:
-            out.write_text("Claude review findings", encoding="utf-8")
-        elif "codex" in cmd:
-            out.write_text("Codex review findings", encoding="utf-8")
-        elif "verifier" in cmd:
-            out.write_text("VERDICT: PASS_WITH_NOTES\nApproved", encoding="utf-8")
+        filename = out.name
+        if "triage" in filename:
+            out.write_text(json.dumps({"risk": "HIGH"}), encoding="utf-8")
+        elif "--output-last-message" in cmd:
+            idx = cmd.index("--output-last-message")
+            output_file = Path(cmd[idx + 1])
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text(json.dumps({"verdict": "PASS_WITH_NOTES", "unresolved": [], "summary": "Approved"}), encoding="utf-8")
+            out.write_text(json.dumps({"verdict": "PASS_WITH_NOTES", "unresolved": [], "summary": "Approved"}), encoding="utf-8")
+        elif "verif" in filename:
+            out.write_text(json.dumps({"verdict": "PASS_WITH_NOTES", "unresolved": [], "summary": "Approved"}), encoding="utf-8")
+        elif "review" in filename or "claude" in str(cmd):
+            out.write_text(json.dumps({"verdict": "PASS_WITH_NOTES", "unresolved": [], "summary": "Approved"}), encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
-        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -207,21 +215,31 @@ def test_run_team_triage_routing_high(tmp_path):
         assert any("claude" in cmd for cmd in called_commands)
         assert any("codex" in cmd for cmd in called_commands)
 
-def test_run_team_changes_required_exit_code(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "install ai-team"], cwd=tmp_path, check=True, capture_output=True)
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
+def test_run_team_changes_required_exit_code(tmp_path):
+    _setup_installed_repo(tmp_path)
+    cfg_file = tmp_path / "ai-team.config.json"
+    cfg = load_json(cfg_file)
+    cfg["skipFinalVerificationAtLow"] = False
+    save_json(cfg_file, cfg)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "do not skip final verifier"], cwd=tmp_path, check=True, capture_output=True)
+
+    def fake_capture(cmd, cwd, out, err, allow_failure=False):
         out.parent.mkdir(parents=True, exist_ok=True)
-        if "triage" in cmd:
-            out.write_text("RISK: LOW", encoding="utf-8")
-        elif "verifier" in cmd:
-            out.write_text("VERDICT: CHANGES_REQUIRED\nTests failed.", encoding="utf-8")
+        filename = out.name
+        if "triage" in filename:
+            out.write_text(json.dumps({"risk": "LOW"}), encoding="utf-8")
+        elif "verif" in filename:
+            out.write_text(json.dumps({"verdict": "CHANGES_REQUIRED", "unresolved": ["tests failed"], "summary": "Tests failed."}), encoding="utf-8")
+        elif "--output-last-message" in cmd:
+            idx = cmd.index("--output-last-message")
+            output_file = Path(cmd[idx + 1])
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "review pass"}), encoding="utf-8")
+            out.write_text(json.dumps({"verdict": "PASS", "unresolved": [], "summary": "review pass"}), encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
-        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -230,25 +248,24 @@ def test_run_team_changes_required_exit_code(tmp_path):
         code = run_team(tmp_path, "Failing change")
         assert code == 2
 
+
 def test_availability_fallback_disabled_raises(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
+    _setup_installed_repo(tmp_path)
     # Set availabilityFallback to false in config
     cfg_file = tmp_path / "ai-team.config.json"
     cfg = load_json(cfg_file)
     cfg["availabilityFallback"] = False
     save_json(cfg_file, cfg)
-
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "update config"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "update config"], cwd=tmp_path, check=True, capture_output=True)
 
-    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
+    def fake_capture(cmd, cwd, out, err, allow_failure=False):
         out.parent.mkdir(parents=True, exist_ok=True)
-        if "triage" in cmd:
-            out.write_text("RISK: HIGH", encoding="utf-8")
+        filename = out.name
+        if "triage" in filename:
+            out.write_text(json.dumps({"risk": "HIGH"}), encoding="utf-8")
         else:
             out.write_text("OK", encoding="utf-8")
-        structured_output(out, cmd)
         err.write_text("", encoding="utf-8")
         return 0
 
@@ -259,104 +276,5 @@ def test_availability_fallback_disabled_raises(tmp_path):
 
     with patch("ai_team.runner.which", side_effect=mock_which), \
          patch("ai_team.runner._capture", side_effect=fake_capture):
-        with pytest.raises(RuntimeError, match="Required reviewers missing"):
+        with pytest.raises(RuntimeError, match=r"(?:Reviewer CLI missing|wymagany)"):
             run_team(tmp_path, "High risk task without claude")
-
-
-def test_capture_timeout_terminates_and_records_timeout(tmp_path):
-    output = tmp_path / "out.txt"
-    error = tmp_path / "err.txt"
-    script = [sys.executable, "-c", "import time; time.sleep(10)"]
-
-    started = time.monotonic()
-    with pytest.raises(RuntimeError, match="timeout"):
-        _capture(script, tmp_path, output, error, timeout=0.05)
-    assert time.monotonic() - started < 2
-    assert "timeout" in error.read_text(encoding="utf-8").lower()
-
-
-def test_doctor_probe_checks_cli_help(tmp_path, capsys):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "setup"], cwd=tmp_path, check=True, capture_output=True)
-
-    real_run = subprocess.run
-
-    def fake_run(cmd, cwd=None, capture_output=False, text=False, timeout=None, **kwargs):
-        if "--help" not in cmd:
-            return real_run(cmd, cwd=cwd, capture_output=capture_output, text=text, timeout=timeout, **kwargs)
-        return subprocess.CompletedProcess(cmd, 0, stdout="tool 1.2.3\n", stderr="")
-
-    with patch("ai_team.runner.which", side_effect=lambda cmd: f"/usr/bin/{cmd}"), \
-         patch("ai_team.runner.subprocess.run", side_effect=fake_run):
-        assert doctor(tmp_path, probe=True) == 0
-
-
-def test_doctor_probe_reports_failed_help(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "setup"], cwd=tmp_path, check=True, capture_output=True)
-
-    def fake_run(cmd, cwd=None, capture_output=False, text=False, timeout=None, **kwargs):
-        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom")
-
-    with patch("ai_team.runner.which", side_effect=lambda cmd: f"/usr/bin/{cmd}"), \
-         patch("ai_team.runner.subprocess.run", side_effect=fake_run):
-        assert doctor(tmp_path, probe=True) == 1
-
-
-def test_resume_continues_after_simulated_crash(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "install ai-team"], cwd=tmp_path, check=True, capture_output=True)
-
-    attempts = {"count": 0}
-
-    def fake_capture(cmd, cwd, out, err, allow_failure=False, **kwargs):
-        out.parent.mkdir(parents=True, exist_ok=True)
-        if "triage" in cmd:
-            out.write_text("RISK: LOW", encoding="utf-8")
-        elif "verifier" in cmd:
-            attempts["count"] += 1
-            if attempts["count"] == 1:
-                raise RuntimeError("Simulated crash")
-            out.write_text("VERDICT: PASS\nAll good", encoding="utf-8")
-        else:
-            out.write_text("OK", encoding="utf-8")
-        structured_output(out, cmd)
-        err.write_text("", encoding="utf-8")
-        return 0
-
-    with patch("ai_team.runner.which", return_value="/usr/bin/tool"), \
-         patch("ai_team.runner._capture", side_effect=fake_capture):
-        with pytest.raises(RuntimeError, match="Simulated crash"):
-            run_team(tmp_path, "Fix typo in readme")
-        run_id = (tmp_path / ".ai/latest.txt").read_text(encoding="utf-8").strip()
-        assert resume_team(tmp_path, run_id) == 0
-
-    result = load_json(tmp_path / ".ai/runs" / run_id / "result.json")
-    assert result["status"] == "PASS_WITH_NOTES" or result["status"] == "PASS"
-
-
-def test_resume_latest_refuses_missing_run(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    with pytest.raises(RuntimeError, match="No latest run recorded"):
-        resume_team(tmp_path, "latest")
-
-
-def test_resume_refuses_branch_mismatch(tmp_path):
-    init_git_repo(tmp_path)
-    install(tmp_path, "core")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "install ai-team"], cwd=tmp_path, check=True, capture_output=True)
-    rd = tmp_path / ".ai/runs/fake-run"
-    rd.mkdir(parents=True)
-    (rd / "prompt.txt").write_text("task", encoding="utf-8")
-    (rd / "branch.txt").write_text("ai/some-other-branch", encoding="utf-8")
-    (rd / "base-ref.txt").write_text("deadbeef", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="Unsafe branch context"):
-        resume_team(tmp_path, "fake-run")

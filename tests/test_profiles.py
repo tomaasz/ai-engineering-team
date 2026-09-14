@@ -34,7 +34,7 @@ def test_unknown_profile_raises():
 def test_full_profile_contains_all_profiles_files():
     full_prof = _profile("full")
     full_selected = set(_selected(full_prof).keys())
-    
+
     for prof_name in ["core", "python", "web", "postgres", "ocr", "geneteka"]:
         sub_prof = _profile(prof_name)
         sub_selected = set(_selected(sub_prof).keys())
