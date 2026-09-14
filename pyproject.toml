@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-engineering-team"
-version = "4.7.0"
+version = "4.8.0"
 description = "Cross-platform multi-agent software engineering orchestrator for Gemini / Antigravity, Codex and Claude Code"
 readme = "README.md"
 license = "MIT"

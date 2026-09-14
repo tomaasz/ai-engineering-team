@@ -20,3 +20,4 @@ if ! command -v ai-team >/dev/null 2>&1; then
 fi
 
 exec ai-team onboard "$@"
+

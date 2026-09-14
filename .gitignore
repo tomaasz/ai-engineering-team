@@ -40,3 +40,4 @@ Thumbs.db
 # Temporary
 *.tmp
 *.bak
+.tmp_pytest/

@@ -16,3 +16,4 @@ if (-not (Get-Command ai-team -ErrorAction SilentlyContinue)) {
 }
 
 & ai-team onboard @RemainingArgs
+

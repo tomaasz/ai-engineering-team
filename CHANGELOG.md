@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.8.0] - 2026-09-14
+
+### Added
+- **360° Application Audit Command (`ai-team audit`)**:
+  - New built-in CLI command: `ai-team audit [project] [--output docs/AUDIT.md] [--lang pl|en] [--worktree] [--solo] [--auto-merge]`.
+  - Conducts an end-to-end, rigorous inspection across 6 critical dimensions:
+    1. **Architecture & Code Structure**: modularity, domain boundaries, technical debt, code smells, duplication, dead code.
+    2. **Security & Vulnerabilities**: OWASP Top 10, CWE, secret/credential leaks, SQLi/Command injection, XSS, CSRF, SSRF, IDOR, dependency vulnerabilities.
+    3. **Reliability & Error Handling**: swallowed errors, unhandled rejections, race conditions, memory leaks, open descriptors.
+    4. **Performance & Database**: N+1 queries, missing indexes, event loop blocking, caching opportunities.
+    5. **Testing & QA**: coverage gaps on critical flows, test integrity, mock veracity.
+    6. **DevOps & Containers**: Dockerfile hygiene (multi-stage, non-root), structured logging, health checks (`/health`), fail-fast env validation.
+  - Automatically produces a structured `docs/AUDIT.md` report with:
+    - Executive Summary & Overall Health Score (A–F / 0–100%).
+    - Findings Matrix with severity levels (`[CRITICAL]`, `[HIGH]`, `[MEDIUM]`, `[LOW]`), exact `file:line` locations, and suggested fixes.
+    - Deep-Dive Analysis with code proofs, security/stability impact, and minimal remediation snippets.
+    - Prioritized Action Plan organized into Phase 1 (P0 immediate blockers), Phase 2 (P1), and Phase 3 (P2 backlog).
+- **New Audit Skill (`audit/full-app-audit`)**:
+  - Cross-platform skill templates in English (`SKILL.md`) and Polish (`SKILL.pl.md`) for both `.agents/skills/audit/full-app-audit/` and `.claude/skills/audit/full-app-audit/`.
+  - Included across all project profiles (`core`, `python`, `web`, `postgres`, `ocr`, `geneteka`, `full`).
+- **Specialized Auditor Agent Persona (`auditor`)**:
+  - Dedicated agent role configured for deep analysis and zero destructive code modifications (`.agents/agents/auditor.md` and `.claude/agents/auditor.md`).
+  - Auto-suggested via `ai-team skills suggest` and auto-provisioned during audit tasks.
+
 ## [4.7.0] - 2026-09-14
 
 ### Added

@@ -99,6 +99,16 @@ def parser():
         x.add_argument('--provider', choices=['agy', 'claude', 'codex'], default=None)
         x.add_argument('--no-commit', action='store_true', help='Skip automatic Git commit after setup')
 
+    x = s.add_parser('audit', help='Run comprehensive 360° application audit (security, architecture, tests, ops)')
+    x.add_argument('project', nargs='?', default='.')
+    x.add_argument('--output', default='docs/AUDIT.md', help='Output audit report file path (default: docs/AUDIT.md)')
+    x.add_argument('--lang', choices=['en', 'pl'], default='pl', help='Language for audit prompt and report (default: pl)')
+    x.add_argument('--worktree', action='store_true', default=True, help='Execute audit inside an isolated git worktree')
+    x.add_argument('--no-worktree', dest='worktree', action='store_false', help='Execute directly without worktree')
+    x.add_argument('--solo', '--single-provider', dest='solo', action='store_true', default=None,
+                   help='Run in solo mode with primaryProvider only')
+    x.add_argument('--auto-merge', '--merge', dest='auto_merge', action='store_true', help='Automatically merge audit report on success')
+
     return p
 
 def main():
@@ -256,6 +266,61 @@ def main():
         if a.command in ('onboard', 'quickstart', 'setup'):
             return onboard(project, profile_name=a.profile, solo=a.solo,
                            lang=a.lang, provider=a.provider, no_commit=a.no_commit)
+        if a.command == 'audit':
+            output_file = getattr(a, 'output', 'docs/AUDIT.md')
+            prompt = (
+                f"Przeprowadź kompletny, rygorystyczny audyt 360° aplikacji i przygotuj szczegółowy raport w {output_file}.\n"
+                "Zakres audytu:\n"
+                "1. ARCHITEKTURA I JAKOŚĆ KODU: modularność, granice domenowe, dług technologiczny, martwy kod, duplikacja.\n"
+                "2. BEZPIECZEŃSTWO I PODATNOŚCI: OWASP Top 10, CWE, wycieki sekretów/kluczy, SQLi/Command injection, XSS, CSRF, SSRF, IDOR, nagłówki bezpieczeństwa, audyt zależności.\n"
+                "3. NIEZAWODNOŚĆ I OBSŁUGA BŁĘDÓW: wyciszane wyjątki, unhandled rejections, wyścigi współbieżności, zarządzanie zasobami (wycieki pamięci, deskryptory).\n"
+                "4. WYDAJNOŚĆ I BAZA DANYCH: pętle N+1 zapytań, brakujące indeksy, blokowanie pętli zdarzeń, optymalizacja pamięci podręcznej.\n"
+                "5. TESTY I JAKOŚĆ: luki w pokryciu testami (ścieżki krytyczne i błędy), fałszywie pozytywne mocki.\n"
+                "6. DEVOPS I KONTENERY: Dockerfile (multi-stage, non-root), logowanie strukturyzowane, healthchecki (/health), walidacja zmiennych środowiskowych.\n\n"
+                "Struktura raportu:\n"
+                "- Executive Summary (Ogólna ocena, stan zdrowia systemu).\n"
+                "- Matryca Znalezisk: Tabela ze wszystkimi problemami [CRITICAL, HIGH, MEDIUM, LOW], lokalizacją plik:linia i zalecaną akcją.\n"
+                "- Szczegółowa Analiza: Dowód w kodzie, wpływ oraz konkretny, minimalny kod naprawczy dla każdego problemu.\n"
+                "- Plan Działań Naprawczych (Faza 1 P0, Faza 2 P1, Faza 3 P2)."
+            )
+            lang = getattr(a, 'lang', 'pl')
+            if lang == 'en':
+                prompt = (
+                    f"Perform a comprehensive, rigorous 360° application audit and generate a detailed report in {output_file}.\n"
+                    "Audit Scope:\n"
+                    "1. ARCHITECTURE & CODE QUALITY: modularity, domain boundaries, technical debt, dead code, DRY violations.\n"
+                    "2. SECURITY & VULNERABILITIES: OWASP Top 10, CWE, secret/key leaks, SQLi/Command injection, XSS, CSRF, SSRF, IDOR, security headers, dependency audit.\n"
+                    "3. RELIABILITY & ERROR HANDLING: silent exceptions, unhandled rejections, race conditions, resource cleanup (memory leaks, open descriptors).\n"
+                    "4. PERFORMANCE & DATABASE: N+1 queries, missing indexes, event loop blocking, cache optimization.\n"
+                    "5. TESTING & QUALITY: test coverage gaps (critical flows and error paths), mock validity and edge cases.\n"
+                    "6. DEVOPS & CONTAINERS: Dockerfile hygiene (multi-stage, non-root), structured logging, health checks (/health), environment variable validation.\n\n"
+                    "Report Structure:\n"
+                    "- Executive Summary (System health score, overall maturity).\n"
+                    "- Findings Matrix: Markdown table with all findings [CRITICAL, HIGH, MEDIUM, LOW], file:line location, and recommended action.\n"
+                    "- Deep-Dive Analysis: Proof in code, security/stability impact, and minimal actionable code fix for every finding.\n"
+                    "- Remediation Action Plan (Phase 1 P0 immediate blockers, Phase 2 P1, Phase 3 P2 backlog)."
+                )
+            else:
+                prompt = (
+                    f"Przeprowadź kompletny, rygorystyczny audyt 360° aplikacji i przygotuj szczegółowy raport w {output_file}.\n"
+                    "Zakres audytu:\n"
+                    "1. ARCHITEKTURA I JAKOŚĆ KODU: modularność, granice domenowe, dług technologiczny, martwy kod, duplikacja.\n"
+                    "2. BEZPIECZEŃSTWO I PODATNOŚCI: OWASP Top 10, CWE, wycieki sekretów/kluczy, SQLi/Command injection, XSS, CSRF, SSRF, IDOR, nagłówki bezpieczeństwa, audyt zależności.\n"
+                    "3. NIEZAWODNOŚĆ I OBSŁUGA BŁĘDÓW: wyciszane wyjątki, unhandled rejections, wyścigi współbieżności, zarządzanie zasobami (wycieki pamięci, deskryptory).\n"
+                    "4. WYDAJNOŚĆ I BAZA DANYCH: pętle N+1 zapytań, brakujące indeksy, blokowanie pętli zdarzeń, optymalizacja pamięci podręcznej.\n"
+                    "5. TESTY I JAKOŚĆ: luki w pokryciu testami (ścieżki krytyczne i błędy), fałszywie pozytywne mocki.\n"
+                    "6. DEVOPS I KONTENERY: Dockerfile (multi-stage, non-root), logowanie strukturyzowane, healthchecki (/health), walidacja zmiennych środowiskowych.\n\n"
+                    "Struktura raportu:\n"
+                    "- Executive Summary (Ogólna ocena, stan zdrowia systemu).\n"
+                    "- Matryca Znalezisk: Tabela ze wszystkimi problemami [CRITICAL, HIGH, MEDIUM, LOW], lokalizacją plik:linia i zalecaną akcją.\n"
+                    "- Szczegółowa Analiza: Dowód w kodzie, wpływ oraz konkretny, minimalny kod naprawczy dla każdego problemu.\n"
+                    "- Plan Działań Naprawczych (Faza 1 P0, Faza 2 P1, Faza 3 P2)."
+                )
+            auto_skills = False if getattr(a, 'no_auto_skills', False) else None
+            solo = getattr(a, 'solo', None)
+            return run_team(project, prompt, use_worktree=a.worktree, auto_merge=a.auto_merge,
+                            auto_discard=False, non_interactive=False,
+                            auto_skills=auto_skills, solo=solo, availability_fallback=True)
     except Exception as e:
         print('ERROR:', e, file=sys.stderr)
         return 1

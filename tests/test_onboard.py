@@ -46,3 +46,4 @@ def test_onboard_detects_node_test_and_resolves_conflicts(tmp_path):
     onboard(tmp_path, profile_name='core', solo=True, lang='pl', no_commit=True)
     st_after = _state(tmp_path)
     assert len(st_after['conflicts']) == 0
+

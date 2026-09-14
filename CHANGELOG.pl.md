@@ -9,6 +9,30 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.8.0] - 2026-09-14
+
+### Added
+- **Komenda Kompleksowego Audytu Aplikacji 360° (`ai-team audit`)**:
+  - Nowa wbudowana komenda CLI: `ai-team audit [project] [--output docs/AUDIT.md] [--lang pl|en] [--worktree] [--solo] [--auto-merge]`.
+  - Przeprowadza rygorystyczną, wielowymiarową inspekcję aplikacji w 6 kluczowych obszarach:
+    1. **Architektura i jakość kodu**: modularność, granice domenowe, dług technologiczny, martwy kod, zapachy kodu (code smells), duplikacja.
+    2. **Bezpieczeństwo i podatności**: OWASP Top 10 (2025), CWE, wycieki sekretów i kluczy, SQLi/Command injection, XSS, CSRF, SSRF, IDOR, podatności zależności.
+    3. **Niezawodność i obsługa błędów**: wyciszane wyjątki, unhandled rejections, wyścigi współbieżności, wycieki pamięci i otwartych deskryptorów.
+    4. **Wydajność i bazy danych**: pętle zapytań N+1, brakujące indeksy, blokowanie pętli zdarzeń, optymalizacja pamięci podręcznej.
+    5. **Testy i jakość QA**: luki w pokryciu krytycznych ścieżek i błędów, wiarygodność mocków.
+    6. **DevOps i kontenery**: higiena Dockerfile (multi-stage, użytkownik non-root), logowanie strukturyzowane, healthchecki (`/health`), walidacja zmiennych środowiskowych (fail-fast).
+  - Automatycznie generuje uporządkowany raport w `docs/AUDIT.md` zawierający:
+    - Executive Summary z ogólną oceną stanu zdrowia systemu (A–F / 0–100%).
+    - Matrycę Znalezisk z priorytetami (`[CRITICAL]`, `[HIGH]`, `[MEDIUM]`, `[LOW]`), dokładną lokalizacją `plik:linia` i rekomendowaną naprawą.
+    - Drobiazgową analizę każdego problemu z dowodem w kodzie, oceną wpływu i minimalnym kodem naprawczym.
+    - Priorytetyzowany Plan Naprawczy podzielony na Fazy (Faza 1 P0, Faza 2 P1, Faza 3 P2).
+- **Nowy Skill Audytowy (`audit/full-app-audit`)**:
+  - Międzyplatformowe szablony skilli w języku angielskim (`SKILL.md`) i polskim (`SKILL.pl.md`) dla `.agents/skills/audit/full-app-audit/` oraz `.claude/skills/audit/full-app-audit/`.
+  - Włączony do wszystkich profili projektowych (`core`, `python`, `web`, `postgres`, `ocr`, `geneteka`, `full`).
+- **Dedykowana Rola Agenta Audytora (`auditor`)**:
+  - Specjalistyczna persona nastawiona na dogłębną inspekcję analityczną bez destrukcyjnych zmian w kodzie (`.agents/agents/auditor.md` i `.claude/agents/auditor.md`).
+  - Automatycznie sugerowana przez `ai-team skills suggest` i automatycznie dostarczana do zadań audytowych.
+
 ## [4.7.0] - 2026-09-14
 
 ### Added

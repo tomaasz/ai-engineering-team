@@ -223,6 +223,30 @@ Standalone onboarding scripts are also available:
 
 ---
 
+### Option C: 360° Comprehensive Application Audit (`ai-team audit`)
+
+Perform an exhaustive, multi-dimensional code, architecture, and security inspection without writing manual audit prompts:
+
+```bash
+ai-team audit .
+# or in solo mode inside an isolated worktree:
+ai-team audit . --worktree --solo
+# generate English report into a custom location:
+ai-team audit . --output docs/SECURITY_AUDIT.md --lang en
+```
+
+*What `ai-team audit` inspects across 6 critical dimensions:*
+1. **Architecture & Code Quality**: modularity, domain boundaries, code smells, technical debt, dead code, DRY violations.
+2. **Security & Vulnerabilities**: OWASP Top 10 (2025), CWE, secret leaks, injection flaws (SQLi/Command), XSS, CSRF, SSRF, IDOR, dependency CVEs.
+3. **Reliability & Error Handling**: swallowed exceptions, unhandled Promise rejections, race conditions, resource leaks, open descriptors.
+4. **Performance & Database**: N+1 queries, missing indexes, event loop blocking, caching opportunities.
+5. **Testing & QA**: coverage gaps on critical flows, test integrity, mock veracity.
+6. **DevOps & Operations**: Dockerfile hygiene (multi-stage, non-root), structured logging, health checks (`/health`), fail-fast env validation.
+
+The resulting audit report is saved to `docs/AUDIT.md` (or your custom `--output` path) featuring an Executive Summary, Findings Matrix with severity levels (`[CRITICAL]`, `[HIGH]`, `[MEDIUM]`, `[LOW]`), exact code proofs, and a prioritized remediation roadmap (P0/P1/P2).
+
+---
+
 ## Installation Profiles
 
 Profiles determine the set of skills and templates installed:

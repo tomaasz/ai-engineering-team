@@ -223,6 +223,30 @@ Dostępne są także uniwersalne skrypty instalacyjne:
 
 ---
 
+### Wariant C: Kompleksowy Audyt Aplikacji 360° (`ai-team audit`)
+
+Wykonaj drobiazgowy, wielowymiarowy audyt kodu, architektury i bezpieczeństwa aplikacji bez konieczności ręcznego pisania promptów:
+
+```bash
+ai-team audit .
+# lub w trybie solo wewnątrz odizolowanego worktree:
+ai-team audit . --worktree --solo
+# wygenerowanie raportu w języku polskim lub angielskim do wybranej lokalizacji:
+ai-team audit . --output docs/SECURITY_AUDIT.md --lang pl
+```
+
+*Co bada `ai-team audit` w 6 kluczowych wymiarach:*
+1. **Architektura i jakość kodu**: modularność, granice domenowe, zapachy kodu (code smells), dług technologiczny, martwy kod, naruszenia DRY.
+2. **Bezpieczeństwo i podatności**: OWASP Top 10 (2025), CWE, wycieki sekretów/kluczy, wstrzykiwanie kodu (SQLi/Command injection), XSS, CSRF, SSRF, IDOR, luki w zależnościach.
+3. **Niezawodność i obsługa błędów**: wyciszane wyjątki, nieobsługiwane obietnice (unhandled rejections), wyścigi wątków, wycieki zasobów, otwarte deskryptory.
+4. **Wydajność i bazy danych**: pętle zapytań N+1, brakujące indeksy na kluczach obcych, blokowanie pętli zdarzeń, optymalizacja cache.
+5. **Testy i jakość QA**: luki w pokryciu testami ścieżek krytycznych i wyjątków, integralność mocków.
+6. **DevOps i kontenery**: higiena Dockerfile (multi-stage, użytkownik non-root), logowanie strukturyzowane, healthchecki (`/health`), walidacja zmiennych środowiskowych (fail-fast).
+
+Wygenerowany raport zapisywany jest w `docs/AUDIT.md` (lub ścieżce podanej w `--output`) i zawiera Executive Summary z oceną stanu zdrowia systemu (A–F / 0–100%), Matrycę Znalezisk (`[CRITICAL]`, `[HIGH]`, `[MEDIUM]`, `[LOW]`), dokładne dowody w kodzie oraz priorytetyzowany plan naprawczy (P0/P1/P2).
+
+---
+
 ## Profile instalacyjne
 
 Profile determinują zestaw instalowanych modułów umiejętności (Skills) oraz szablonów konfiguracyjnych:

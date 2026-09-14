@@ -218,6 +218,14 @@ def suggest_skills(project: Path, lang: str = 'en') -> List[Dict[str, Any]]:
         })
 
     # Security
+    # Audit & Security
+    suggestions.append({
+        'id': 'audit/full-app-audit',
+        'name': 'full-app-audit',
+        'category': 'audit',
+        'installed': 'audit/full-app-audit' in installed_ids,
+        'reason': 'Kompleksowy audyt 360° architektury, bezpieczeństwa OWASP, testów i wydajności.' if is_pl else 'Comprehensive 360° application audit covering architecture, OWASP, tests, and performance.'
+    })
     suggestions.append({
         'id': 'security/secure-coding',
         'name': 'secure-coding',
