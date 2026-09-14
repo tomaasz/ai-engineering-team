@@ -123,3 +123,9 @@ Instalator zapisuje do projektu odpowiadającą wersję językową każdej instr
 ## Opcje Antigravity
 
 Opcjonalny obiekt `antigravity` konfiguruje `agy`: `model`, `sandbox`, `fullAuto`, `printTimeout` oraz trzy klucze effort powyżej. Żaden inny klucz nie jest akceptowany. Włączenie szerokiego trybu automatyzacji zmienia uprawnienia dostawcy; utrzymuj politykę projektu i dostawcy spójnie. Etapy read-only wymuszają ograniczony tryb dostawcy tam, gdzie jest wspierany, a runner dodatkowo wykrywa zmiany plików w repozytorium.
+
+## Izolacja worktree i czyste wdrażanie
+
+- `useWorktree` (`boolean`, domyślnie: `false`): Gdy `true`, uruchamia przepływ agentów w odizolowanym drzewie roboczym `.ai/worktrees/<run_id>`. Twój katalog roboczy i aktywna gałąź pozostają w pełni nienaruszone. Można włączyć również flagą `--worktree` w CLI.
+- `autoMerge` (`boolean`, domyślnie: `false`): Gdy `true`, automatycznie scala zmiany z izolowanego przebiegu worktree do bieżącej gałęzi i usuwa gałąź roboczą po zakończeniu zadania bez konieczności interaktywnego potwierdzania. Można włączyć również flagą `--auto-merge` / `--merge` w CLI.
+

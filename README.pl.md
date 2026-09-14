@@ -170,12 +170,22 @@ pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
    ```bash
    ai-team run . "Dodaj eksport do pliku CSV wraz z pełnym zestawem testów" --worktree
    ```
+   *W trybie `--worktree` agenci pracują w odizolowanym katalogu roboczym. Po zakończeniu zadania CLI automatycznie pyta:*
+   ```text
+   Czy wdrożyć zmiany na gałąź główną 'main'?
+     [t]ak       - scal (merge) zmiany na 'main' i usuń gałąź roboczą
+     [p]odgląd   - zobacz pełny diff zmian
+     [o]drzuć    - odrzuć zmiany i usuń gałąź roboczą
+     [n]ie       - pozostaw gałąź do późniejszego wglądu
+   Wybór [t/p/o/n]:
+   ```
+   *Wybór **[t]ak** natychmiast scala zmiany do gałęzi głównej i usuwa tymczasową gałąź roboczą, zapewniając idealny porządek w repozytorium bez namnażania niepotrzebnych gałęzi.*
 
-5. Przejrzyj przebieg i scal lub odrzuć:
+5. Przejrzyj przebieg i scal lub odrzuć później (jeśli wybrano [n]ie):
    ```bash
    ai-team review            # Podsumowanie werdyktów i kontroli
    ai-team review --diff     # Podgląd pełnego patcha
-   ai-team review --merge    # Scalenie gałęzi do bieżącej gałęzi
+   ai-team review --merge    # Scalenie gałęzi do bieżącej gałęzi (z automatycznym usunięciem gałęzi)
    ai-team review --discard  # Usunięcie gałęzi przebiegu
    ```
 

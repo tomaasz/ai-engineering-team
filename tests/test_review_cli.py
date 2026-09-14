@@ -78,3 +78,71 @@ def test_review_run_discard(tmp_path, capsys):
     assert code == 0
     out, _ = capsys.readouterr()
     assert "Discarded and deleted branch ai/test-discard" in out
+
+
+def test_review_run_merge_deletes_branch(tmp_path, capsys):
+    runs_dir = tmp_path / ".ai" / "runs"
+    run_dir = runs_dir / "20260914-test-merge"
+    run_dir.mkdir(parents=True)
+    (run_dir / "branch.txt").write_text("ai/test-merge", encoding="utf-8")
+
+    with patch("ai_team.runner.ensure_git_repo", return_value=tmp_path), \
+         patch("ai_team.runner._git") as mock_git:
+        def git_side_effect(proj, *args, **kwargs):
+            m = MagicMock()
+            m.returncode = 0
+            if "branch" in args and "--show-current" in args:
+                m.stdout = "main"
+            elif "status" in args:
+                m.stdout = ""
+            else:
+                m.stdout = ""
+            return m
+        mock_git.side_effect = git_side_effect
+
+        code = review_run(tmp_path, "20260914-test-merge", action="merge")
+        assert code == 0
+
+        # Verify merge was called
+        merge_calls = [c for c in mock_git.call_args_list if "merge" in c[0]]
+        assert len(merge_calls) == 1
+        assert "ai/test-merge" in merge_calls[0][0]
+
+        # Verify branch was deleted
+        branch_d_calls = [c for c in mock_git.call_args_list if "branch" in c[0] and "-D" in c[0]]
+        assert len(branch_d_calls) == 1
+        assert "ai/test-merge" in branch_d_calls[0][0]
+
+        out, _ = capsys.readouterr()
+        assert "deleted temporary branch" in out
+
+
+def test_review_run_merge_keep_branch(tmp_path, capsys):
+    runs_dir = tmp_path / ".ai" / "runs"
+    run_dir = runs_dir / "20260914-test-merge-keep"
+    run_dir.mkdir(parents=True)
+    (run_dir / "branch.txt").write_text("ai/test-merge-keep", encoding="utf-8")
+
+    with patch("ai_team.runner.ensure_git_repo", return_value=tmp_path), \
+         patch("ai_team.runner._git") as mock_git:
+        def git_side_effect(proj, *args, **kwargs):
+            m = MagicMock()
+            m.returncode = 0
+            if "branch" in args and "--show-current" in args:
+                m.stdout = "main"
+            elif "status" in args:
+                m.stdout = ""
+            else:
+                m.stdout = ""
+            return m
+        mock_git.side_effect = git_side_effect
+
+        code = review_run(tmp_path, "20260914-test-merge-keep", action="merge", keep_branch=True)
+        assert code == 0
+
+        # Verify branch -D was NOT called
+        branch_d_calls = [c for c in mock_git.call_args_list if "branch" in c[0] and "-D" in c[0]]
+        assert len(branch_d_calls) == 0
+
+        out, _ = capsys.readouterr()
+        assert "Successfully merged ai/test-merge-keep into main" in out

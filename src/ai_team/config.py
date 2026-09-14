@@ -11,6 +11,7 @@ DEFAULT_POLICY = {'LOW': ['codex'], 'MEDIUM': ['codex'], 'HIGH': ['claude', 'cod
 BOOLEAN_KEYS = ('requireCleanWorkingTree', 'createBranchForEachRun', 'availabilityFallback',
                 'reuseBranchForFollowUp', 'skipFinalVerificationAtLow', 'allowUnreviewedLowRisk',
                 'useWorktree')
+                'useWorktree', 'autoMerge')
 # Keys the runner actually reads. Anything else is drift and must fail loudly.
 ANTIGRAVITY_KEYS = {'model', 'sandbox', 'fullAuto', 'printTimeout',
                     'triageEffort', 'implementationEffort', 'verificationEffort'}

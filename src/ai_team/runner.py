@@ -622,6 +622,155 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
 
 
 def run_team(project, user_prompt, use_worktree=None):
+def _prompt_worktree_merge(project, base, branch, current, run_id, config,
+                           auto_merge=None, auto_discard=None, non_interactive=False,
+                           status_val='UNKNOWN'):
+    """Prompt user or execute automated actions after worktree run completes."""
+    lang = config.get('language', 'en')
+
+    # Verify if branch exists
+    if _git(project, 'rev-parse', '--verify', branch, check=False).returncode != 0:
+        return
+
+    # Check diff against base
+    diff_proc = _git(project, 'diff', '--stat', f'{base}...{branch}', check=False)
+    diff_stat = diff_proc.stdout.strip()
+    if not diff_stat:
+        # No code changes; automatically clean up empty branch
+        _git(project, 'branch', '-D', branch, check=False)
+        if lang == 'pl':
+            print(f"\nBrak zmian w kodzie. Gałąź robocza '{branch}' została automatycznie usunięta.")
+        else:
+            print(f"\nNo code changes detected. Temporary branch '{branch}' was automatically deleted.")
+        return
+
+    if auto_discard:
+        _git(project, 'branch', '-D', branch, check=False)
+        if lang == 'pl':
+            print(f"\n[OK] Zmiany odrzucone (--auto-discard). Gałąź robocza '{branch}' została usunięta.")
+        else:
+            print(f"\n[OK] Changes discarded (--auto-discard). Temporary branch '{branch}' has been deleted.")
+        return
+
+    if auto_merge or config.get('autoMerge', False):
+        if _git(project, 'status', '--porcelain').stdout.strip():
+            if lang == 'pl':
+                print(f"\n[BŁĄD] Nie można scalić automatycznie: nieskomitowane zmiany w katalogu roboczym.")
+                print(f"Gałąź '{branch}' zachowana. Scal ręcznie: ai-team review {run_id} --merge")
+            else:
+                print(f"\n[FAIL] Cannot auto-merge: working tree has uncommitted changes.")
+                print(f"Branch '{branch}' kept. Merge manually: ai-team review {run_id} --merge")
+            return
+        proc = _git(project, 'merge', '--no-ff', '-m', f"Merge branch '{branch}' (run {run_id})", branch, check=False)
+        if proc.returncode == 0:
+            _git(project, 'branch', '-D', branch, check=False)
+            if lang == 'pl':
+                print(f"\n[OK] Pomyślnie wdrożono zmiany na '{current}'. Gałąź robocza '{branch}' została usunięta.")
+            else:
+                print(f"\n[OK] Successfully deployed changes to '{current}'. Temporary branch '{branch}' has been deleted.")
+        else:
+            if lang == 'pl':
+                print(f"\n[BŁĄD] Konflikt scalania:\n{proc.stdout}\n{proc.stderr}")
+            else:
+                print(f"\n[FAIL] Merge conflict or error:\n{proc.stdout}\n{proc.stderr}")
+        return
+
+    is_interactive = not non_interactive and hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
+    if not is_interactive:
+        if lang == 'pl':
+            print(f"\nŚrodowisko nieinteraktywne. Gałąź '{branch}' zachowana. Aby scalić: ai-team review {run_id} --merge")
+        else:
+            print(f"\nNon-interactive session. Branch '{branch}' kept. To merge: ai-team review {run_id} --merge")
+        return
+
+    if lang == 'pl':
+        header = (
+            f"\n" + "=" * 60 + "\n"
+            f"Zadanie agentów zakończone w izolacji (gałąź '{branch}').\n"
+            f"Status zadania: {status_val}\n"
+            f"Podsumowanie zmian:\n{diff_stat}\n"
+            f"=" * 60 + "\n"
+            f"Czy wdrożyć zmiany na gałąź główną '{current}'?\n"
+            f"  [t]ak       - scal (merge) zmiany na '{current}' i usuń gałąź roboczą\n"
+            f"  [p]odgląd   - zobacz pełny diff zmian\n"
+            f"  [o]drzuć    - odrzuć zmiany i usuń gałąź roboczą\n"
+            f"  [n]ie       - pozostaw gałąź '{branch}' do późniejszego wglądu\n"
+        )
+        prompt_str = "Wybór [t/p/o/n]: "
+    else:
+        header = (
+            f"\n" + "=" * 60 + "\n"
+            f"Agent run completed in isolation (branch '{branch}').\n"
+            f"Run status: {status_val}\n"
+            f"Changes summary:\n{diff_stat}\n"
+            f"=" * 60 + "\n"
+            f"Deploy changes to active branch '{current}'?\n"
+            f"  [y]es       - merge changes into '{current}' and delete temporary branch\n"
+            f"  [d]iff      - view full diff of changes\n"
+            f"  [x] discard - discard changes and delete temporary branch\n"
+            f"  [n]o        - keep branch '{branch}' for manual review later\n"
+        )
+        prompt_str = "Choice [y/d/x/n]: "
+
+    print(header)
+    while True:
+        try:
+            choice = input(prompt_str).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            choice = 'n'
+
+        if choice in ('t', 'tak', 'y', 'yes'):
+            if _git(project, 'status', '--porcelain').stdout.strip():
+                if lang == 'pl':
+                    print("\nNie można scalić: katalog roboczy zawiera nieskomitowane zmiany.")
+                    print("Zabezpiecz je najpierw (stash/commit).")
+                    print(f"Gałąź '{branch}' zachowana. Scal ręcznie: ai-team review {run_id} --merge")
+                else:
+                    print("\nCannot merge: working tree has uncommitted changes.")
+                    print("Stash or commit your changes first.")
+                    print(f"Branch '{branch}' kept. Merge manually: ai-team review {run_id} --merge")
+                break
+            proc = _git(project, 'merge', '--no-ff', '-m', f"Merge branch '{branch}' (run {run_id})", branch, check=False)
+            if proc.returncode == 0:
+                _git(project, 'branch', '-D', branch, check=False)
+                if lang == 'pl':
+                    print(f"[OK] Pomyślnie wdrożono zmiany na '{current}'. Gałąź robocza '{branch}' została usunięta.")
+                else:
+                    print(f"[OK] Successfully deployed changes to '{current}'. Temporary branch '{branch}' has been deleted.")
+            else:
+                if lang == 'pl':
+                    print(f"[BŁĄD] Wystąpił konflikt scalania:\n{proc.stdout}\n{proc.stderr}")
+                    print(f"Dokończ scalanie ręcznie lub użyj: git merge --abort")
+                else:
+                    print(f"[FAIL] Merge error or conflict:\n{proc.stdout}\n{proc.stderr}")
+                    print(f"Resolve conflict manually or run: git merge --abort")
+            break
+        elif choice in ('p', 'podgląd', 'podglad', 'd', 'diff', 'v', 'view'):
+            full_diff = _git(project, 'diff', f'{base}...{branch}', check=False).stdout
+            print('\n' + (full_diff if full_diff.strip() else "(no diff)"))
+            continue
+        elif choice in ('o', 'odrzuć', 'odrzuc', 'x', 'discard'):
+            _git(project, 'branch', '-D', branch, check=False)
+            if lang == 'pl':
+                print(f"[OK] Zmiany odrzucone. Gałąź '{branch}' została usunięta.")
+            else:
+                print(f"[OK] Changes discarded. Temporary branch '{branch}' has been deleted.")
+            break
+        elif choice in ('n', 'nie', 'no', 'k', 'keep'):
+            if lang == 'pl':
+                print(f"Gałąź '{branch}' zachowana. Przegląd i scalanie: ai-team review {run_id} --merge")
+            else:
+                print(f"Branch '{branch}' kept. Review or merge later: ai-team review {run_id} --merge")
+            break
+        else:
+            if lang == 'pl':
+                print("Nieprawidłowy wybór. Wybierz: [t]ak, [p]odgląd, [o]drzuć, [n]ie.")
+            else:
+                print("Invalid choice. Please choose: [y]es, [d]iff, [x] discard, [n]o.")
+
+
+def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_discard=None, non_interactive=False):
     project = ensure_git_repo(project.resolve())
     config = load_config(project)
     if use_worktree is None:
@@ -663,10 +812,12 @@ def run_team(project, user_prompt, use_worktree=None):
         (rd / 'base-ref.txt').write_text(base, encoding='utf-8')
         (rd / 'branch.txt').write_text(branch, encoding='utf-8')
         (rd / 'worktree.txt').write_text(str(worktree_dir), encoding='utf-8')
+        rc = 1
         try:
             if (project / '.ai-team').is_dir() and not (worktree_dir / '.ai-team').exists():
                 shutil.copytree(project / '.ai-team', worktree_dir / '.ai-team')
             return _execute(worktree_dir, config, rd, run_id, base, branch, user_prompt, primary, verification, main_repo=project)
+            rc = _execute(worktree_dir, config, rd, run_id, base, branch, user_prompt, primary, verification, main_repo=project)
         finally:
             status_out = _git(worktree_dir, 'status', '--porcelain', check=False).stdout.strip()
             if status_out:
@@ -675,6 +826,12 @@ def run_team(project, user_prompt, use_worktree=None):
             _git(project, 'worktree', 'remove', '--force', str(worktree_dir), check=False)
             if worktree_dir.exists():
                 shutil.rmtree(worktree_dir, ignore_errors=True)
+        res_file = rd / 'result.json'
+        status_val = load_json(res_file).get('status', 'UNKNOWN') if res_file.exists() else 'UNKNOWN'
+        _prompt_worktree_merge(project, base, branch, current, run_id, config,
+                               auto_merge=auto_merge, auto_discard=auto_discard,
+                               non_interactive=non_interactive, status_val=status_val)
+        return rc
     else:
         branch = current
         reuse = config.get('reuseBranchForFollowUp', False) and current.startswith(prefix)
@@ -714,8 +871,10 @@ def runs(project):
             if not names and branch != current:
                 stale.append(branch)
         marker = '*' if branch == current else ' '
+        stat_label = 'merged/deleted' if branch and not exists else changed
         print(f"{marker} {directory.name}  {result.get('status', 'UNKNOWN'):<17} "
               f"{branch or '(no branch)'}  {'missing' if branch and not exists else changed}")
+              f"{branch or '(no branch)'}  {stat_label}")
     if stale:
         print('\nBranches with no changes against their base:')
         print('  git branch -d ' + ' '.join(stale))
@@ -723,6 +882,7 @@ def runs(project):
 
 
 def review_run(project, run_id=None, action=None):
+def review_run(project, run_id=None, action=None, keep_branch=False):
     """Inspect, diff, merge, or discard a run."""
     # If run_id looks like a path or repo directory, redirect to project
     if run_id in ('.', './', '.\\') or (isinstance(run_id, str) and Path(run_id).is_dir() and (Path(run_id) / '.git').exists()):
@@ -794,6 +954,11 @@ def review_run(project, run_id=None, action=None):
             print(f"[FAIL] Merge conflict or error:\n{proc.stdout}\n{proc.stderr}")
             return proc.returncode
         print(f"[OK] Successfully merged {branch} into {current}")
+        if not keep_branch:
+            _git(project, 'branch', '-D', branch, check=False)
+            print(f"[OK] Successfully merged {branch} into {current} and deleted temporary branch")
+        else:
+            print(f"[OK] Successfully merged {branch} into {current}")
         return 0
 
     if action == 'discard':

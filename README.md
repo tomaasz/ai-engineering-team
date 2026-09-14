@@ -170,12 +170,22 @@ pipx install "git+ssh://git@github.com/tomaasz/ai-engineering-team.git"
    ```bash
    ai-team run . "Add CSV export feature with full test coverage" --worktree
    ```
+   *In `--worktree` mode, changes are isolated in a temporary worktree. When the run finishes, the CLI automatically prompts:*
+   ```text
+   Deploy changes to active branch 'main'?
+     [y]es       - merge changes into 'main' and delete temporary branch
+     [d]iff      - view full diff of changes
+     [x] discard - discard changes and delete temporary branch
+     [n]o        - keep branch for manual review later
+   Choice [y/d/x/n]:
+   ```
+   *Choosing **[y]es** merges into your branch and immediately deletes the temporary branch, maintaining a clean repository with zero branch clutter.*
 
-5. Review the run and merge or discard:
+5. Review the run and merge or discard later (if kept):
    ```bash
    ai-team review            # View summary of verdicts and checks
    ai-team review --diff     # View complete patch
-   ai-team review --merge    # Cleanly merge into current branch
+   ai-team review --merge    # Cleanly merge into current branch (auto-deletes branch)
    ai-team review --discard  # Discard and delete the run branch
    ```
 

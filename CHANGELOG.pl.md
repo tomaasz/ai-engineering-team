@@ -9,6 +9,18 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.2.0] - 2026-09-14
+
+### Added
+- **Automatyczne pytanie o wdrożenie (merge) po izolacji w Git Worktree**: Po ukończeniu zadania w odizolowanym drzewie roboczym (`--worktree`) CLI natychmiast pyta użytkownika, czy wdrożyć zmiany na bieżącą gałąź główną (`main`).
+  - `[t]ak`: Scala zmiany (`git merge --no-ff`) na gałąź główną i automatycznie usuwa gałąź roboczą (`git branch -D`), zapobiegając namnażaniu się starych gałęzi w repozytorium.
+  - `[p]odgląd`: Wyświetla pełny diff zmian i ponawia zapytanie.
+  - `[o]drzuć`: Odrzuca zmiany i natychmiast usuwa gałąź roboczą.
+  - `[n]ie`: Pozostawia gałąź do późniejszego wglądu przez `ai-team review <run_id>`.
+- **Automatyczne czyszczenie pustych przebiegów**: Jeśli agenci nie wprowadzili żadnych zmian w kodzie, tymczasowa gałąź jest automatycznie usuwana bez niepotrzebnych pytań.
+- **Flagi automatyzacji dla skryptów i CI**: Dodano flagi `--auto-merge` (`--merge`), `--auto-discard` (`--discard`) oraz `--non-interactive` w poleceniu `ai-team run`, jak również klucz konfiguracji `"autoMerge": true` w `ai-team.config.json`.
+- **Usuwanie gałęzi po scaleniu w CLI Review**: Polecenie `ai-team review <run_id> --merge` domyślnie usuwa scalaną gałąź roboczą (z możliwością jej zachowania za pomocą `--keep-branch`).
+
 ## [4.1.0] - 2026-09-14
 
 Usprawnienia autonomicznego workflow i recenzji inspirowane nowoczesnymi architekturami agentowymi (izolacja git worktree, żywa pamięć zespołu, mapowanie repozytorium AST oraz dedykowane CLI do inspekcji).

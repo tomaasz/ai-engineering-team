@@ -128,3 +128,9 @@ exists to avoid. `ai-team update --lang <en|pl>` switches both together.
 ## Antigravity options
 
 The optional `antigravity` object configures `agy`: `model`, `sandbox`, `fullAuto`, `printTimeout`, and the three effort keys above. No other key is accepted. Enabling a broad automation mode changes provider permissions; keep project and provider policy aligned. Read-only stages force a restricted provider mode where supported, and the runner also detects repository file changes.
+
+## Worktree isolation and clean deployment
+
+- `useWorktree` (`boolean`, default: `false`): When `true`, runs the multi-agent workflow inside an isolated `.ai/worktrees/<run_id>` Git worktree. Your working tree and active branch remain completely untouched. Can also be enabled via `--worktree` flag on the CLI.
+- `autoMerge` (`boolean`, default: `false`): When `true`, automatically merges changes from isolated worktree runs into the active branch and deletes the temporary branch upon run completion, without requiring interactive confirmation. Can also be enabled via `--auto-merge` / `--merge` on the CLI.
+

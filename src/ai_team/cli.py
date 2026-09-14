@@ -37,6 +37,9 @@ def parser():
     x.add_argument('prompt', nargs='?')
     x.add_argument('--prompt', dest='prompt_opt')
     x.add_argument('--worktree', action='store_true', help='Execute agent run inside an isolated git worktree')
+    x.add_argument('--auto-merge', '--merge', dest='auto_merge', action='store_true', help='Automatically merge into target branch on success and delete temporary branch')
+    x.add_argument('--auto-discard', '--discard', dest='auto_discard', action='store_true', help='Automatically discard changes and delete temporary branch')
+    x.add_argument('--non-interactive', action='store_true', help='Do not prompt interactively after isolated run')
 
     x = s.add_parser('resume')
     x.add_argument('run_id')
@@ -52,6 +55,7 @@ def parser():
     x.add_argument('--diff', action='store_true', help='Display complete diff against base ref')
     x.add_argument('--merge', action='store_true', help='Merge the run branch into current branch')
     x.add_argument('--discard', action='store_true', help='Discard and delete the run branch')
+    x.add_argument('--keep-branch', action='store_true', help='Keep temporary branch after merging instead of deleting it')
 
     x = s.add_parser('uninstall')
     x.add_argument('project', nargs='?', default='.')
@@ -90,6 +94,8 @@ def main():
             if not prompt:
                 raise RuntimeError('Prompt is empty.')
             return run_team(project, prompt, use_worktree=a.worktree)
+            return run_team(project, prompt, use_worktree=a.worktree, auto_merge=a.auto_merge,
+                            auto_discard=a.auto_discard, non_interactive=a.non_interactive)
         if a.command == 'runs':
             return runs(project)
         if a.command == 'resume':
@@ -97,6 +103,7 @@ def main():
         if a.command == 'review':
             action = 'diff' if a.diff else ('merge' if a.merge else ('discard' if a.discard else None))
             return review_run(project, a.run_id, action)
+            return review_run(project, a.run_id, action, keep_branch=a.keep_branch)
         if a.command == 'uninstall':
             rem, skip = uninstall(project, a.dry_run)
             [print(('[DRY] ' if a.dry_run else '') + '[REMOVE] ' + x) for x in rem]

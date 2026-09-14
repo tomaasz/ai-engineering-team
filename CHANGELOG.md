@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.2.0] - 2026-09-14
+
+### Added
+- **Automated Merge Prompt after Worktree Isolation**: After completing a task in an isolated Git worktree (`--worktree`), the CLI automatically prompts whether to deploy/merge changes directly into the active branch (`main`).
+  - `[y]es`: Merges the run branch (`git merge --no-ff`) and automatically deletes the temporary branch (`git branch -D`) to keep the repository completely clean with zero branch clutter.
+  - `[d]iff`: Displays the full patch and re-prompts.
+  - `[x] discard`: Discards changes and immediately removes the temporary branch.
+  - `[n]o`: Keeps the branch for later review via `ai-team review <run_id>`.
+- **Automatic Empty Run Cleanup**: If agents made no code changes during the run, the temporary branch is automatically pruned without interrupting the user.
+- **Automation Flags for CI & Scripting**: Added `--auto-merge` (`--merge`), `--auto-discard` (`--discard`), and `--non-interactive` flags to `ai-team run`, as well as the `"autoMerge": true` configuration setting.
+- **Auto-Deletion on CLI Merge**: `ai-team review <run_id> --merge` now automatically removes the merged branch by default to prevent orphan branch accumulation (supported with `--keep-branch` if preservation is desired).
+
 ## [4.1.0] - 2026-09-14
 
 Autonomous workflow and review improvements inspired by modern agentic architectures (Git worktrees, living memory, AST repository mapping, and dedicated review inspection).
