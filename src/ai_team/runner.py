@@ -621,7 +621,6 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
             print(report['note'])
 
 
-def run_team(project, user_prompt, use_worktree=None):
 def _prompt_worktree_merge(project, base, branch, current, run_id, config,
                            auto_merge=None, auto_discard=None, non_interactive=False,
                            status_val='UNKNOWN'):
@@ -873,7 +872,6 @@ def runs(project):
         marker = '*' if branch == current else ' '
         stat_label = 'merged/deleted' if branch and not exists else changed
         print(f"{marker} {directory.name}  {result.get('status', 'UNKNOWN'):<17} "
-              f"{branch or '(no branch)'}  {'missing' if branch and not exists else changed}")
               f"{branch or '(no branch)'}  {stat_label}")
     if stale:
         print('\nBranches with no changes against their base:')
@@ -881,7 +879,6 @@ def runs(project):
     return 0
 
 
-def review_run(project, run_id=None, action=None):
 def review_run(project, run_id=None, action=None, keep_branch=False):
     """Inspect, diff, merge, or discard a run."""
     # If run_id looks like a path or repo directory, redirect to project
