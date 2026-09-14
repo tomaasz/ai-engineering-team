@@ -123,6 +123,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.5.0"
 ```
 
 ### Upgrading
@@ -288,6 +289,34 @@ ai-team update .
 
 - **Protected files**: `PROJECT_CONTEXT.md`, `ai-team.config.json`, and `.agents/skills/project/` are never overwritten.
 - **Conflict handling**: If a template file was modified locally, `ai-team update` preserves your local changes and writes the upstream version to `.ai-team/conflicts/<path>`, preventing accidental data loss.
+
+### Checking for Available Updates
+
+```bash
+ai-team update --check
+ai-team status
+```
+
+### Automated Updates with GitHub Actions
+
+To enable automated weekly PRs whenever templates or skills are updated upstream:
+```bash
+ai-team workflow .
+```
+This generates `.github/workflows/ai-team-update.yml` in your project repository. When committed, it runs weekly on Monday or on demand via `workflow_dispatch`, executing `ai-team update .` and opening a PR if changes are detected.
+
+### Git and Repository Hygiene (.gitignore vs Private Mode)
+
+`ai-team` automatically creates `.ai/.gitignore` (ignoring `runs/` and `latest.txt`) and `.ai-team/.gitignore` (ignoring `conflicts/` and `backups/`).
+
+To configure the root repository:
+```bash
+# Standard team mode: ignores runtime logs and conflicts in .gitignore
+ai-team gitignore .
+
+# Private solo developer mode: ignores all AI files in local .git/info/exclude
+ai-team gitignore . --private
+```
 
 ---
 

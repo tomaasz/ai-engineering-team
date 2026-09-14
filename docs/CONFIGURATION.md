@@ -138,3 +138,8 @@ The optional `antigravity` object configures `agy`: `model`, `sandbox`, `fullAut
 
 - `autoSkills` (`boolean`, default: `true`): When `true`, enables proactive skill provisioning by AI agents. The runner inspects project stack, task prompt keywords, and files modified during implementation to automatically install required skills from the template catalog (e.g. `devops/docker-quality` when Docker files are created, or `postgres/postgres` for SQL migrations). Can be disabled via `--no-auto-skills` flag on `ai-team run` or by setting `"autoSkills": false`.
 
+## Automated updates and repository hygiene
+
+- `ai-team workflow [project]`: Generates `.github/workflows/ai-team-update.yml` to enable automated weekly PRs with template and skill updates.
+- `ai-team gitignore [project]`: Configures runtime log and conflict ignore rules in `.gitignore`.
+- `ai-team gitignore [project] --private`: Configures complete private solo developer mode in `.git/info/exclude`.

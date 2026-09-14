@@ -123,6 +123,7 @@ pipx install "git+https://github.com/tomaasz/ai-engineering-team.git"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.5.0"
 ```
 
 ### Aktualizacja
@@ -288,6 +289,34 @@ ai-team update .
 
 - **Pliki chronione**: `PROJECT_CONTEXT.md`, `ai-team.config.json` oraz `.agents/skills/project/` nigdy nie są nadpisywane.
 - **Obsługa konfliktów**: Jeśli zmodyfikowałeś plik szablonu lokalnie, `ai-team update` zachowuje Twoją wersję, a wersję nadrzędną zapisuje w `.ai-team/conflicts/<sciezka>`, zapobiegając utracie zmian.
+
+### Sprawdzanie dostępnych aktualizacji
+
+```bash
+ai-team update --check
+ai-team status
+```
+
+### Automatyczne aktualizacje via GitHub Actions
+
+Aby włączyć automatyczne cotygodniowe Pull Requesty przy aktualizacji szablonów lub skilli:
+```bash
+ai-team workflow .
+```
+Polecenie to tworzy plik `.github/workflows/ai-team-update.yml` w repozytorium Twojego projektu. Po zacommitowaniu workflow uruchamia się w poniedziałki lub na żądanie via `workflow_dispatch`, wykonując `ai-team update .` i zakładając PR w razie pojawienia się zmian.
+
+### Higiena repozytorium Git (.gitignore vs Tryb prywatny)
+
+`ai-team` automatycznie tworzy `.ai/.gitignore` (ignorując `runs/` i `latest.txt`) oraz `.ai-team/.gitignore` (ignorując `conflicts/` i `backups/`).
+
+Aby skonfigurować reguły dla całego projektu:
+```bash
+# Standardowy tryb zespołowy: ignoruje logi uruchomień i konflikty w .gitignore
+ai-team gitignore .
+
+# Prywatny tryb deweloperski: ukrywa wszystkie pliki AI w lokalnym .git/info/exclude
+ai-team gitignore . --private
+```
 
 ---
 

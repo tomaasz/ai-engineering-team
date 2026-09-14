@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 import pytest
-from ai_team.installer import install, update, status, uninstall, VERSION
+from ai_team.installer import install, update, status, uninstall, install_workflow, configure_gitignore, VERSION
 from ai_team.utils import load_json, sha256_file
 
 def init_git_repo(path: Path):
@@ -111,3 +111,87 @@ def test_uninstall_uninstalled_raises(tmp_path):
 def test_update_uninstalled_raises(tmp_path):
     with pytest.raises(RuntimeError, match="Framework nie jest zainstalowany"):
         update(tmp_path)
+
+
+def test_ensure_gitignores_on_install_and_update(tmp_path):
+    init_git_repo(tmp_path)
+    install(tmp_path, "core")
+
+    ai_ign = tmp_path / ".ai" / ".gitignore"
+    team_ign = tmp_path / ".ai-team" / ".gitignore"
+
+    assert ai_ign.is_file()
+    assert "runs/" in ai_ign.read_text(encoding="utf-8")
+    assert "latest.txt" in ai_ign.read_text(encoding="utf-8")
+
+    assert team_ign.is_file()
+    assert "conflicts/" in team_ign.read_text(encoding="utf-8")
+    assert "backups/" in team_ign.read_text(encoding="utf-8")
+
+    # Remove them and ensure update() restores them
+    ai_ign.unlink()
+    team_ign.unlink()
+    update(tmp_path)
+    assert ai_ign.is_file()
+    assert team_ign.is_file()
+
+
+def test_install_workflow(tmp_path):
+    init_git_repo(tmp_path)
+    dest = install_workflow(tmp_path)
+    assert dest.is_file()
+    assert dest == tmp_path / ".github" / "workflows" / "ai-team-update.yml"
+    content = dest.read_text(encoding="utf-8")
+    assert "AI Engineering Team Update" in content
+    assert "ai-team update" in content
+
+
+def test_configure_gitignore_standard(tmp_path):
+    init_git_repo(tmp_path)
+    res = configure_gitignore(tmp_path, private=False)
+    assert res == "configured"
+    ign_file = tmp_path / ".gitignore"
+    assert ign_file.is_file()
+    text = ign_file.read_text(encoding="utf-8")
+    assert ".ai/runs/" in text
+    assert ".ai-team/conflicts/" in text
+
+    # Calling again should be idempotent
+    res2 = configure_gitignore(tmp_path, private=False)
+    assert res2 == "up-to-date"
+
+
+def test_configure_gitignore_private(tmp_path):
+    init_git_repo(tmp_path)
+    res = configure_gitignore(tmp_path, private=True)
+    assert res == "private-configured"
+    exclude_file = tmp_path / ".git" / "info" / "exclude"
+    assert exclude_file.is_file()
+    text = exclude_file.read_text(encoding="utf-8")
+    assert ".ai/" in text
+    assert ".agents/" in text
+    assert "PROJECT_CONTEXT.md" in text
+
+    # Calling again should be idempotent
+    res2 = configure_gitignore(tmp_path, private=True)
+    assert res2 == "up-to-date"
+
+
+def test_status_upstream_check(tmp_path, monkeypatch):
+    init_git_repo(tmp_path)
+    install(tmp_path, "core")
+
+    # Mock check_upstream_version to simulate newer version
+    import ai_team.utils
+    monkeypatch.setattr(ai_team.utils, "check_upstream_version", lambda: "99.0.0")
+
+    st = status(tmp_path, check_upstream=True)
+    assert st["installed"] is True
+    assert st["upstreamVersion"] == "99.0.0"
+    assert st["outdated"] is True
+
+    # When up to date
+    monkeypatch.setattr(ai_team.utils, "check_upstream_version", lambda: VERSION)
+    st2 = status(tmp_path, check_upstream=True)
+    assert st2["upstreamVersion"] == VERSION
+    assert st2["outdated"] is False

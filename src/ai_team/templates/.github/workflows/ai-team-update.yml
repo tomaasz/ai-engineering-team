@@ -1,0 +1,69 @@
+name: AI Engineering Team Update
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
+  workflow_dispatch:      # Manual trigger from Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-ai-team:
+    name: Check & Update AI Engineering Team Templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install latest AI Engineering Team
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade git+https://github.com/tomaasz/ai-engineering-team.git
+
+      - name: Update project templates and skills
+        run: |
+          ai-team update .
+
+      - name: Create Pull Request on template changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No template or skill changes detected. Repository is up to date."
+            exit 0
+          fi
+
+          BRANCH_NAME="chore/ai-team-update"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -B "$BRANCH_NAME"
+          git add -A
+          git commit -m "chore(ai-team): update templates and skills to latest release"
+          git push origin "$BRANCH_NAME" --force
+
+          # Check if an open PR already exists
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Pull request #$EXISTING_PR already exists and has been updated."
+          else
+            gh pr create \
+              --title "chore(ai-team): update AI Engineering Team templates and skills" \
+              --body "Automated pull request updating AI Engineering Team templates, agents, and skills to the latest upstream release.
+
+### Notes
+- Preserves local project context (\`PROJECT_CONTEXT.md\`), local config (\`ai-team.config.json\`), and project skills (\`.agents/skills/project/\`).
+- Any conflicting files are safely placed under \`.ai-team/conflicts/\` for manual resolution.
+- Please review the changes and merge when ready." \
+              --head "$BRANCH_NAME" \
+              --base main
+          fi

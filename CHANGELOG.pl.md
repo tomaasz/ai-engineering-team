@@ -9,6 +9,19 @@ a projekt stosuje [wersjonowanie semantyczne](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [4.5.0] - 2026-09-14
+
+### Added
+- **Automatyzacja aktualizacji via GitHub Actions (`ai-team workflow [project]`)**:
+  - Instaluje gotowy workflow GitHub Actions (`.github/workflows/ai-team-update.yml`) w repozytorium docelowym.
+  - Uruchamia się cyklicznie co tydzień (lub na żądanie), aktualizuje `ai-engineering-team`, wywołuje `ai-team update .` i automatycznie zakłada Pull Request (`chore/ai-team-update`) w przypadku wykrycia zmian w szablonach lub skillach.
+- **Wzmocniona ochrona i higiena Git (`ai-team gitignore [project] [--private]`)**:
+  - Automatycznie tworzy `.ai-team/.gitignore` podczas instalacji i aktualizacji, chroniąc przed przypadkowym commitowaniem tymczasowych kopii konfliktów i backupów.
+  - `ai-team gitignore`: Dodaje standardowe reguły ignorowania artefaktów wykonawczych (`.ai/runs/`, `.ai-team/conflicts/` itp.) do głównego `.gitignore` projektu.
+  - `ai-team gitignore --private`: Konfiguruje tryb prywatnego dewelopera w lokalnym `.git/info/exclude`, ukrywając wszystkie pliki frameworka przed zdalnym repozytorium zespołu.
+- **Sprawdzanie dostępności nowej wersji (`ai-team update --check` oraz `ai-team status`)**:
+  - Zapewnia pełną odporność na brak sieci, umożliwiając sprawdzenie czy na GitHubie pojawiło się nowsze wydanie oraz informując o krokach aktualizacji.
+
 ## [4.4.0] - 2026-09-14
 
 ### Added

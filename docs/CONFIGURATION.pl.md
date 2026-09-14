@@ -133,3 +133,8 @@ Opcjonalny obiekt `antigravity` konfiguruje `agy`: `model`, `sandbox`, `fullAuto
 
 - `autoSkills` (`boolean`, domyślnie: `true`): Gdy `true`, włącza proaktywny dobór skilli przez agentów AI. Runner bada stack projektu, słowa kluczowe w prompcie zadania oraz pliki zmienione podczas implementacji, automatycznie doinstalowując brakujące skille z katalogu szablonów (np. `devops/docker-quality` gdy powstaną pliki Docker, lub `postgres/postgres` dla migracji SQL). Można wyłączyć flagą `--no-auto-skills` w `ai-team run` lub ustawiając `"autoSkills": false`.
 
+## Automatyzacja aktualizacji i higiena repozytorium
+
+- `ai-team workflow [project]`: Generuje `.github/workflows/ai-team-update.yml` włączający cotygodniowe automatyczne Pull Requesty z aktualizacjami szablonów i skilli.
+- `ai-team gitignore [project]`: Konfiguruje reguły ignorowania logów i konfliktów w pliku `.gitignore`.
+- `ai-team gitignore [project] --private`: Konfiguruje tryb prywatnego dewelopera w `.git/info/exclude`.

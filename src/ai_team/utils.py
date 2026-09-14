@@ -59,3 +59,36 @@ def safe_slug(text, max_len=44):
     text = text.lower().translate(str.maketrans('ąćęłńóśźż','acelnoszz'))
     s = re.sub(r'[^a-z0-9._-]+','-',text).strip('-')
     return (s[:max_len].rstrip('-') or 'task')
+
+
+def check_upstream_version(repo="tomaasz/ai-engineering-team", timeout=2.0):
+    """Check GitHub API for latest release version without blocking offline work.
+    Returns latest version string (e.g. '4.5.0') or None on network error.
+    """
+    import urllib.request
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    req = urllib.request.Request(
+        url,
+        headers={'User-Agent': 'ai-engineering-team', 'Accept': 'application/vnd.github.v3+json'}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode('utf-8'))
+                tag = data.get('tag_name', '').strip()
+                return tag.lstrip('v') if tag else None
+    except Exception:
+        return None
+    return None
+
+
+def version_is_newer(upstream: str, current: str) -> bool:
+    """Return True if upstream version is strictly newer than current version."""
+    if not upstream or not current:
+        return False
+    def parse(v):
+        return tuple(int(x) if x.isdigit() else x for x in re.split(r'[.-]', v))
+    try:
+        return parse(upstream) > parse(current)
+    except Exception:
+        return upstream != current

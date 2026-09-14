@@ -10,6 +10,7 @@ Zainstaluj Pythona 3.10+, Git i `pipx`, a potem wersję, którą sprawdziłeś:
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@<sprawdzony-commit-lub-wydanie>"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.5.0"
 ai-team --version
 ```
 
@@ -50,6 +51,23 @@ ai-team resolve . AGENTS.md --strategy upstream
 Zadania VS Code scalane są po identyfikatorach. Komentarze JSONC i przecinki końcowe są odczytywane, ale udane scalenie tworzy kopię zapasową i zapisuje znormalizowany JSON, więc formatowanie i komentarze mogą zniknąć — instalator to zgłasza.
 
 Profil zmienisz przy aktualizacji: `ai-team update . --profile web`. Pliki wycofane przez mniejszy profil mogą pozostać śledzone aż do `uninstall`; przejrzyj je przy zmianie profilu.
+
+## Automatyzacja aktualizacji i higiena Git
+
+Aby zautomatyzować aktualizacje szablonów w pipeline CI, zainstaluj workflow GitHub Actions:
+```bash
+ai-team workflow .
+```
+Polecenie to tworzy plik `.github/workflows/ai-team-update.yml`, który automatycznie tworzy cotygodniowe Pull Requesty z aktualizacjami.
+
+Aby skonfigurować reguły ignorowania Git:
+```bash
+# Ignorowanie logów uruchomień i konfliktów w .gitignore:
+ai-team gitignore .
+
+# Lub tryb prywatny (tylko w .git/info/exclude):
+ai-team gitignore . --private
+```
 
 ## Gotowość
 

@@ -174,6 +174,17 @@ def _merge_tasks(project, template):
     return 'merged (comments removed; original: ' + str(backup.relative_to(project)) + ')' if had_comments else 'merged'
 
 
+def _ensure_gitignores(project: Path):
+    (project / '.ai/runs').mkdir(parents=True, exist_ok=True)
+    ign = project / '.ai/.gitignore'
+    if not ign.exists():
+        ign.write_text('runs/\nlatest.txt\n', encoding='utf-8')
+    (project / STATE_DIR).mkdir(parents=True, exist_ok=True)
+    ign_team = project / STATE_DIR / '.gitignore'
+    if not ign_team.exists():
+        ign_team.write_text('conflicts/\nbackups/\n', encoding='utf-8')
+
+
 def install(project: Path, profile_name: str, lang: str = 'en'):
     project = ensure_git_repo(project.resolve())
     _check_language(lang)
@@ -230,10 +241,7 @@ def install(project: Path, profile_name: str, lang: str = 'en'):
             print(f'[ADD]  {rel}')
     if 'ai-team.config.json' in seeded:
         _apply_config_defaults(project, profile, lang)
-    (project / '.ai/runs').mkdir(parents=True, exist_ok=True)
-    ign = project / '.ai/.gitignore'
-    if not ign.exists():
-        ign.write_text('runs/\nlatest.txt\n', encoding='utf-8')
+    _ensure_gitignores(project)
     _save(project, profile_name, managed, conflicts, lang=lang)
     return managed
 
@@ -302,26 +310,36 @@ def update(project: Path, profile_name=None, lang=None):
             print(f'[UPD]  {rel}')
     # Retired templates remain tracked, including unresolved retired conflicts.
     conflicts.extend(x for x in state.get('conflicts', []) if x not in files and x not in kept)
+    _ensure_gitignores(project)
     _save(project, profile_name, new, conflicts, kept, lang)
     return conflicts
 
 
-def status(project: Path):
+def status(project: Path, check_upstream: bool = False):
     project = project.resolve()
     try:
         project = ensure_git_repo(project)
     except RuntimeError:
         pass
     st = _state(project)
+    if not st:
+        return {'installed': False}
+    upstream = None
+    outdated = False
+    if check_upstream:
+        from .utils import check_upstream_version, version_is_newer
+        upstream = check_upstream_version()
+        if upstream and st.get('frameworkVersion') and version_is_newer(upstream, st.get('frameworkVersion')):
+            outdated = True
     return {
-        'installed': False
-    } if not st else {
         'installed': True,
         'frameworkVersion': st.get('frameworkVersion'),
         'profile': st.get('profile'),
         'language': st.get('language', 'en'),
         'managedFiles': len(st.get('managed', {})),
-        'conflicts': st.get('conflicts', [])
+        'conflicts': st.get('conflicts', []),
+        'upstreamVersion': upstream,
+        'outdated': outdated,
     }
 
 
@@ -386,3 +404,87 @@ def resolve(project: Path, relative: str, strategy='keep'):
     _save(project, state['profile'], state['managed'], state['conflicts'], state.get('kept', []), state.get('language', 'en'))
     if source.exists():
         source.unlink()
+
+
+def install_workflow(project: Path) -> Path:
+    project = project.resolve()
+    try:
+        project = ensure_git_repo(project)
+    except RuntimeError:
+        pass
+    src = template_root() / '.github' / 'workflows' / 'ai-team-update.yml'
+    dest = project_path(project, '.github/workflows/ai-team-update.yml')
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dest)
+    return dest
+
+
+def _git_dir(project: Path) -> Path:
+    from .utils import run
+    try:
+        p = run(['git', 'rev-parse', '--git-dir'], cwd=project, capture=True, check=False)
+        if p.returncode == 0:
+            res = Path(p.stdout.strip())
+            return res if res.is_absolute() else (project / res).resolve()
+    except Exception:
+        pass
+    return project / '.git'
+
+
+def configure_gitignore(project: Path, private: bool = False) -> str:
+    project = project.resolve()
+    try:
+        project = ensure_git_repo(project)
+    except RuntimeError:
+        pass
+
+    if private:
+        exclude_file = _git_dir(project) / 'info' / 'exclude'
+        exclude_file.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude_file.read_text(encoding='utf-8') if exclude_file.exists() else ''
+        header = '# AI Engineering Team (Private / Uncommitted)'
+        rules = [
+            '.ai/',
+            '.ai-team/',
+            '.agents/',
+            '.claude/',
+            '.vscode/tasks.json',
+            'AI_TEAM.md',
+            'AGENTS.md',
+            'CLAUDE.md',
+            'GEMINI.md',
+            'PROJECT_CONTEXT.md',
+            'ai-team.config.json',
+        ]
+        needed = [r for r in rules if r not in existing]
+        if not needed:
+            return 'up-to-date'
+        with exclude_file.open('a', encoding='utf-8', newline='\n') as f:
+            if existing and not existing.endswith('\n'):
+                f.write('\n')
+            if header not in existing:
+                f.write(f'\n{header}\n')
+            for r in needed:
+                f.write(f'{r}\n')
+        return 'private-configured'
+    else:
+        ign_file = project / '.gitignore'
+        existing = ign_file.read_text(encoding='utf-8') if ign_file.exists() else ''
+        header = '# AI Engineering Team runtime & conflicts'
+        rules = [
+            '.ai/runs/',
+            '.ai/latest.txt',
+            '.ai-team/conflicts/',
+            '.ai-team/backups/',
+        ]
+        needed = [r for r in rules if r not in existing]
+        if not needed:
+            return 'up-to-date'
+        with ign_file.open('a', encoding='utf-8', newline='\n') as f:
+            if existing and not existing.endswith('\n'):
+                f.write('\n')
+            if header not in existing:
+                f.write(f'\n{header}\n')
+            for r in needed:
+                f.write(f'{r}\n')
+        return 'configured'

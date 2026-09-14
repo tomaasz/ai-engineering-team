@@ -10,6 +10,7 @@ Install Python 3.10+, Git, and `pipx`, then install the verified release:
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.2.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.3.0"
 pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.4.0"
+pipx install "git+https://github.com/tomaasz/ai-engineering-team.git@v4.5.0"
 ai-team --version
 ```
 
@@ -50,6 +51,23 @@ ai-team resolve . AGENTS.md --strategy upstream
 VS Code tasks are merged by task and input identifiers. JSONC comments and trailing commas are parsed, but a successful merge normalizes JSON and backs up the original.
 
 Profile changes can be applied via `ai-team update . --profile web`.
+
+## Automated Updates & Git Hygiene
+
+To automate template updates in your CI pipeline, install the GitHub Actions workflow:
+```bash
+ai-team workflow .
+```
+This generates `.github/workflows/ai-team-update.yml` to automatically create weekly update Pull Requests.
+
+To configure Git ignore rules:
+```bash
+# Ignore runtime logs and conflicts in .gitignore:
+ai-team gitignore .
+
+# Or run in local private mode (only via .git/info/exclude):
+ai-team gitignore . --private
+```
 
 ## Readiness
 

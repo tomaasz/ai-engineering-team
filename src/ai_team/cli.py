@@ -1,6 +1,6 @@
 import argparse, sys
 from pathlib import Path
-from .installer import install, update, status, uninstall, resolve
+from .installer import install, update, status, uninstall, resolve, install_workflow, configure_gitignore
 from .runner import run_team, doctor, resume_team, runs, review_run
 from .skills import list_skills, suggest_skills, add_skill, remove_skill, detect_stack
 from .utils import profiles_root
@@ -17,10 +17,18 @@ def parser():
     x.add_argument('--auto', action='store_true', help='Auto-detect repository stack and select best profile')
     x.add_argument('--lang', choices=['en', 'pl'])
 
+    x = s.add_parser('workflow', help='Install GitHub Actions automated update workflow')
+    x.add_argument('project', nargs='?', default='.')
+
+    x = s.add_parser('gitignore', help='Configure .gitignore or private .git/info/exclude rules')
+    x.add_argument('project', nargs='?', default='.')
+    x.add_argument('--private', action='store_true', help='Add exclusions to private .git/info/exclude instead of root .gitignore')
+
     x = s.add_parser('update')
     x.add_argument('project', nargs='?', default='.')
     x.add_argument('--profile')
     x.add_argument('--lang', choices=['en', 'pl'])
+    x.add_argument('--check', action='store_true', help='Check whether a new version is available on GitHub')
 
     x = s.add_parser('status')
     x.add_argument('project', nargs='?', default='.')
@@ -90,15 +98,46 @@ def main():
             install(project, profile, lang)
             print(f'\nInstalled. Profile: {profile}, language: {lang}\nNext: ai-team doctor .')
             return 2 if status(project).get('conflicts') else 0
+        if a.command == 'workflow':
+            dest = install_workflow(project)
+            print(f'GitHub Actions workflow installed: {dest.relative_to(project.resolve()).as_posix()}')
+            print('Next: Commit .github/workflows/ai-team-update.yml to enable automated weekly PR updates.')
+            return 0
+        if a.command == 'gitignore':
+            res = configure_gitignore(project, private=a.private)
+            target = '.git/info/exclude (private)' if a.private else '.gitignore'
+            if res == 'up-to-date':
+                print(f'Git ignore rules in {target} are already up-to-date.')
+            else:
+                print(f'Git ignore rules successfully configured in {target}.')
+            return 0
         if a.command == 'update':
+            if getattr(a, 'check', False):
+                from .utils import check_upstream_version, version_is_newer
+                upstream = check_upstream_version()
+                st = status(project)
+                curr = st.get('frameworkVersion') if st.get('installed') else __version__
+                if not upstream:
+                    print(f'Current version: {curr}. Could not check upstream releases (offline or rate limited).')
+                elif not version_is_newer(upstream, curr):
+                    print(f'AI Engineering Team is up-to-date (version: {curr}).')
+                else:
+                    print(f'Update available: {curr} -> {upstream}')
+                    print(f'Run: pip install --upgrade git+https://github.com/tomaasz/ai-engineering-team.git && ai-team update {project}')
+                return 0
             c = update(project, a.profile, a.lang)
             print('\nUpdate complete.')
             print(f'Conflicts: {len(c)} — .ai-team/conflicts/' if c else 'No conflicts.')
             return 2 if c else 0
         if a.command == 'status':
-            st = status(project)
-            print('AI Engineering Team: not installed' if not st['installed'] else
-                  f"Version: {st['frameworkVersion']}\nProfile: {st['profile']}\nLanguage: {st['language']}\nManaged files: {st['managedFiles']}\nConflicts: {st.get('conflicts', [])}")
+            st = status(project, check_upstream=True)
+            if not st['installed']:
+                print('AI Engineering Team: not installed')
+            else:
+                print(f"Version: {st['frameworkVersion']}\nProfile: {st['profile']}\nLanguage: {st['language']}\nManaged files: {st['managedFiles']}\nConflicts: {st.get('conflicts', [])}")
+                if st.get('upstreamVersion') and st.get('outdated'):
+                    print(f"\n[UPDATE AVAILABLE] Newer version {st['upstreamVersion']} available on GitHub (installed: {st['frameworkVersion']}).")
+                    print(f"To update: pip install --upgrade git+https://github.com/tomaasz/ai-engineering-team.git && ai-team update {project}")
             return 0
         if a.command in ('skill', 'skills'):
             # Parse action and project

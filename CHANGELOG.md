@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.0] - 2026-09-14
+
+### Added
+- **Automated Upstream Updates Workflow (`ai-team workflow [project]`)**:
+  - Installs a ready-to-use GitHub Actions workflow (`.github/workflows/ai-team-update.yml`) in the target project.
+  - Automatically runs on a weekly schedule (or on manual trigger), upgrades `ai-engineering-team`, executes `ai-team update .`, and creates a Pull Request (`chore/ai-team-update`) when template or skill updates are available.
+- **Enhanced Repository Git Hygiene (`ai-team gitignore [project] [--private]`)**:
+  - Automatically provisions `.ai-team/.gitignore` during installation and updates to protect temporary merge conflicts and backups from untracked repository pollution.
+  - `ai-team gitignore`: Configures standard runtime ignore rules (`.ai/runs/`, `.ai-team/conflicts/`, etc.) in the project's root `.gitignore`.
+  - `ai-team gitignore --private`: Configures a completely private solo developer mode in `.git/info/exclude` so that all AI Engineering Team files remain local and invisible to team/remote repositories.
+- **Upstream Version Checking (`ai-team update --check` and `ai-team status`)**:
+  - Satiates offline reliability while allowing `ai-team update --check` and `ai-team status` to notify developers when a newer release is published on GitHub.
+
 ## [4.4.0] - 2026-09-14
 
 ### Added
