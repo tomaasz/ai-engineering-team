@@ -175,7 +175,8 @@ def _command(config, provider, prompt, role, readonly=False, output=None):
         cmd += [prompt]
     else:
         perm = 'plan' if readonly else 'acceptEdits'
-        cmd = ['claude', '-p', prompt, '--permission-mode', perm,
+        cmd = ['claude', '-p', prompt, '--bare', '--no-session-persistence',
+               '--permission-mode', perm,
                '--output-format', 'text', '--max-turns', '30']
         if not readonly and (config.get('antigravity', {}).get('fullAuto', False) or config.get('fullAuto', False)):
             cmd.append('--dangerously-skip-permissions')

@@ -273,3 +273,13 @@ def test_claude_permission_mode_headless():
     fa_ro_cmd = runner._command({'antigravity': {'fullAuto': True}}, 'claude', 'task', 'reviewer', readonly=True)
     assert '--dangerously-skip-permissions' not in fa_ro_cmd
     assert fa_ro_cmd[fa_ro_cmd.index('--permission-mode') + 1] == 'plan'
+
+
+def test_claude_headless_performance_and_cleanliness_flags():
+    cmd = runner._command({}, 'claude', 'task', 'orchestrator')
+    assert '--bare' in cmd
+    assert '--no-session-persistence' in cmd
+
+    ro_cmd = runner._command({}, 'claude', 'task', 'reviewer', readonly=True)
+    assert '--bare' in ro_cmd
+    assert '--no-session-persistence' in ro_cmd
