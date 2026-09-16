@@ -4,6 +4,7 @@ from .installer import install, update, status, uninstall, resolve, install_work
 from .runner import run_team, doctor, resume_team, runs, review_run
 from .skills import list_skills, suggest_skills, add_skill, remove_skill, detect_stack
 from .utils import profiles_root
+from .sarif import export_sarif, markdown_to_sarif
 from . import __version__
 
 def parser():
@@ -102,12 +103,19 @@ def parser():
     x = s.add_parser('audit', help='Run comprehensive 360° application audit (security, architecture, tests, ops)')
     x.add_argument('project', nargs='?', default='.')
     x.add_argument('--output', default='docs/AUDIT.md', help='Output audit report file path (default: docs/AUDIT.md)')
+    x.add_argument('--sarif', nargs='?', const='docs/audit.sarif', default=None,
+                   help='Export audit findings to SARIF 2.1.0 format for GitHub Code Scanning (default: docs/audit.sarif)')
     x.add_argument('--lang', choices=['en', 'pl'], default='pl', help='Language for audit prompt and report (default: pl)')
     x.add_argument('--worktree', action='store_true', default=True, help='Execute audit inside an isolated git worktree')
     x.add_argument('--no-worktree', dest='worktree', action='store_false', help='Execute directly without worktree')
     x.add_argument('--solo', '--single-provider', dest='solo', action='store_true', default=None,
                    help='Run in solo mode with primaryProvider only')
     x.add_argument('--auto-merge', '--merge', dest='auto_merge', action='store_true', help='Automatically merge audit report on success')
+
+    x = s.add_parser('sarif', help='Convert audit findings markdown to SARIF 2.1.0 format for GitHub Code Scanning')
+    x.add_argument('source', nargs='?', default='docs/AUDIT.md', help='Input audit markdown report (default: docs/AUDIT.md)')
+    x.add_argument('--output', default='docs/audit.sarif', help='Output SARIF file path (default: docs/audit.sarif)')
+    x.add_argument('project', nargs='?', default='.')
 
     return p
 
@@ -268,6 +276,9 @@ def main():
                            lang=a.lang, provider=a.provider, no_commit=a.no_commit)
         if a.command == 'audit':
             output_file = getattr(a, 'output', 'docs/AUDIT.md')
+            sarif_file = getattr(a, 'sarif', None)
+            sarif_part = f"\n- Eksport SARIF: Przygotuj również plik {sarif_file} w standardzie OASIS SARIF 2.1.0 ze wszystkimi znaleziskami." if sarif_file else ""
+            sarif_part_en = f"\n- SARIF Export: Also generate {sarif_file} in OASIS SARIF 2.1.0 format with all findings." if sarif_file else ""
             prompt = (
                 f"Przeprowadź kompletny, rygorystyczny audyt 360° aplikacji i przygotuj szczegółowy raport w {output_file}.\n"
                 "Zakres audytu:\n"
@@ -282,6 +293,7 @@ def main():
                 "- Matryca Znalezisk: Tabela ze wszystkimi problemami [CRITICAL, HIGH, MEDIUM, LOW], lokalizacją plik:linia i zalecaną akcją.\n"
                 "- Szczegółowa Analiza: Dowód w kodzie, wpływ oraz konkretny, minimalny kod naprawczy dla każdego problemu.\n"
                 "- Plan Działań Naprawczych (Faza 1 P0, Faza 2 P1, Faza 3 P2)."
+                f"{sarif_part}"
             )
             lang = getattr(a, 'lang', 'pl')
             if lang == 'en':
@@ -299,6 +311,7 @@ def main():
                     "- Findings Matrix: Markdown table with all findings [CRITICAL, HIGH, MEDIUM, LOW], file:line location, and recommended action.\n"
                     "- Deep-Dive Analysis: Proof in code, security/stability impact, and minimal actionable code fix for every finding.\n"
                     "- Remediation Action Plan (Phase 1 P0 immediate blockers, Phase 2 P1, Phase 3 P2 backlog)."
+                    f"{sarif_part_en}"
                 )
             else:
                 prompt = (
@@ -315,12 +328,34 @@ def main():
                     "- Matryca Znalezisk: Tabela ze wszystkimi problemami [CRITICAL, HIGH, MEDIUM, LOW], lokalizacją plik:linia i zalecaną akcją.\n"
                     "- Szczegółowa Analiza: Dowód w kodzie, wpływ oraz konkretny, minimalny kod naprawczy dla każdego problemu.\n"
                     "- Plan Działań Naprawczych (Faza 1 P0, Faza 2 P1, Faza 3 P2)."
+                    f"{sarif_part}"
                 )
             auto_skills = False if getattr(a, 'no_auto_skills', False) else None
             solo = getattr(a, 'solo', None)
-            return run_team(project, prompt, use_worktree=a.worktree, auto_merge=a.auto_merge,
-                            auto_discard=False, non_interactive=False,
-                            auto_skills=auto_skills, solo=solo, availability_fallback=True)
+            ret = run_team(project, prompt, use_worktree=a.worktree, auto_merge=a.auto_merge,
+                           auto_discard=False, non_interactive=False,
+                           auto_skills=auto_skills, solo=solo, availability_fallback=True)
+            if sarif_file:
+                sarif_path = project / sarif_file
+                out_path = project / output_file
+                if (not sarif_path.exists() or sarif_path.stat().st_size == 0) and out_path.exists():
+                    try:
+                        export_sarif(out_path, sarif_path)
+                        print(f"Wyeksportowano raport SARIF 2.1.0 do {sarif_file}")
+                    except Exception as sarif_err:
+                        print(f"Ostrzeżenie: Nie udało się wyeksportować SARIF: {sarif_err}", file=sys.stderr)
+            return ret
+        if a.command == 'sarif':
+            source_file = getattr(a, 'source', 'docs/AUDIT.md')
+            out_file = getattr(a, 'output', 'docs/audit.sarif')
+            src_path = project / source_file
+            out_path = project / out_file
+            if not src_path.exists():
+                print(f"BŁĄD: Plik źródłowy raportu nie istnieje: {src_path}", file=sys.stderr)
+                return 1
+            exported = export_sarif(src_path, out_path)
+            print(f"Wyeksportowano raport SARIF 2.1.0 do {exported}")
+            return 0
     except Exception as e:
         print('ERROR:', e, file=sys.stderr)
         return 1
