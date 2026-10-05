@@ -69,6 +69,10 @@ def parser():
                    help='Enable automatic fallback to isolated primaryProvider when reviewers fail or are missing')
     x.add_argument('--no-availability-fallback', dest='availability_fallback', action='store_false',
                    help='Disable automatic fallback to isolated primaryProvider')
+    x.add_argument('--require-artifacts', dest='require_artifacts', action='store_true', default=None,
+                   help='Enforce physical repository changes and test pass before declaring success')
+    x.add_argument('--no-require-artifacts', dest='require_artifacts', action='store_false',
+                   help='Disable enforcement of physical file modifications')
 
     x = s.add_parser('resume')
     x.add_argument('run_id')
@@ -121,6 +125,11 @@ def parser():
     x.add_argument('project', nargs='?', default='.')
     x.add_argument('--staged', action='store_true', help='Check only staged git changes')
     x.add_argument('--base', default=None, help='Base git ref to diff against')
+
+    x = s.add_parser('check-artifacts', aliases=['verify-artifacts'], help='Verify repository completion artifacts (git changes and test results)')
+    x.add_argument('project', nargs='?', default='.')
+    x.add_argument('--base', default=None, help='Base git ref to diff against')
+    x.add_argument('--run-tests', action='store_true', help='Execute configured verification tests before checking')
 
     return p
 
@@ -263,7 +272,8 @@ def main():
             fallback = getattr(a, 'availability_fallback', None)
             return run_team(project, prompt, use_worktree=a.worktree, auto_merge=a.auto_merge,
                             auto_discard=a.auto_discard, non_interactive=a.non_interactive,
-                            auto_skills=auto_skills, solo=solo, availability_fallback=fallback)
+                            auto_skills=auto_skills, solo=solo, availability_fallback=fallback,
+                            require_artifacts=getattr(a, 'require_artifacts', None))
         if a.command == 'runs':
             return runs(project)
         if a.command == 'resume':
@@ -372,6 +382,37 @@ def main():
                 print('Please remove sensitive credentials before committing changes.')
                 return 1
             print('[CodeGuardian OK] No secrets or API credentials found in diff.')
+            return 0
+        if a.command in ('check-artifacts', 'verify-artifacts'):
+            from .artifact_verifier import verify_completion_artifacts
+            from .config import load_config
+            cfg = {}
+            if (project / 'ai-team.config.json').exists():
+                try:
+                    cfg = load_config(project)
+                except Exception:
+                    pass
+            checks = []
+            if getattr(a, 'run_tests', False) and cfg.get('verification', {}).get('commands'):
+                from .runner import _capture, project_path
+                for i, cmd in enumerate(cfg['verification']['commands']):
+                    rc = _capture(cmd['argv'], project_path(project, cmd.get('cwd', '.')),
+                                  project / f'.ai/check-{i}.stdout', project / f'.ai/check-{i}.stderr', True,
+                                  timeout=cmd.get('timeoutSeconds', 300))
+                    checks.append({'argv': cmd['argv'], 'cwd': cmd.get('cwd', '.'), 'exitCode': rc})
+            res = verify_completion_artifacts(project, base_ref=getattr(a, 'base', None), checks=checks, require_changes=True)
+            if not res.valid:
+                print('[ArtifactVerifier ERROR] Completion artifacts verification failed:')
+                for r in res.reasons:
+                    print(f'  - {r}')
+                if not res.has_physical_changes:
+                    print('  (No modified or untracked project files found in repository)')
+                return 1
+            print('[ArtifactVerifier OK] All completion artifacts verified successfully.')
+            if res.modified_files:
+                print(f'Modified files ({len(res.modified_files)}): ' + ', '.join(res.modified_files))
+            if res.untracked_files:
+                print(f'Untracked files ({len(res.untracked_files)}): ' + ', '.join(res.untracked_files))
             return 0
     except Exception as e:
         print('ERROR:', e, file=sys.stderr)

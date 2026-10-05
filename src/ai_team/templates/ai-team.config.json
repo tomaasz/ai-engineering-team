@@ -29,5 +29,6 @@
     "HIGH": ["claude", "codex"]
   },
   "skipFinalVerificationAtLow": true,
-  "allowUnreviewedLowRisk": false
+  "allowUnreviewedLowRisk": false,
+  "requireArtifacts": false
 }

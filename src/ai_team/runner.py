@@ -723,9 +723,20 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
             for f in secret_findings:
                 print(f"  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}")
 
+        from .artifact_verifier import verify_completion_artifacts
+        require_artifacts = config.get('requireArtifacts', False)
+        artifact_verification = verify_completion_artifacts(
+            project, base, report['checks'], verdict, require_changes=require_artifacts
+        )
+        report['artifactVerification'] = artifact_verification.to_dict()
+        if not artifact_verification.valid:
+            save_json(rd / 'artifact-verification.json', artifact_verification.to_dict())
+            for r in artifact_verification.reasons:
+                print(f"\n[ArtifactVerifier ERROR] {r}")
+
         if _git(project, 'branch', '--show-current').stdout.strip() != branch:
             raise RuntimeError('Agent changed the active branch')
-        if verdict['verdict'] == 'CHANGES_REQUIRED' or diff_check.returncode or secret_findings or any(x['exitCode'] for x in report['checks']):
+        if verdict['verdict'] == 'CHANGES_REQUIRED' or diff_check.returncode or secret_findings or not artifact_verification.valid:
             report['status'] = 'CHANGES_REQUIRED'
             return 2
         report['status'] = 'PASS_WITH_NOTES' if not report['checks'] or verdict['verdict'] == 'PASS_WITH_NOTES' else 'PASS'
@@ -912,7 +923,8 @@ def _prompt_worktree_merge(project, base, branch, current, run_id, config,
 
 
 def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_discard=None,
-             non_interactive=False, auto_skills=None, solo=None, availability_fallback=None):
+             non_interactive=False, auto_skills=None, solo=None, availability_fallback=None,
+             require_artifacts=None):
     project = ensure_git_repo(project.resolve())
     config = load_config(project)
     if solo is not None:
@@ -921,6 +933,8 @@ def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_disc
         config['availabilityFallback'] = bool(availability_fallback)
     if auto_skills is not None:
         config['autoSkills'] = auto_skills
+    if require_artifacts is not None:
+        config['requireArtifacts'] = bool(require_artifacts)
     if use_worktree is None:
         use_worktree = config.get('useWorktree', False)
     primary = config.get('primaryProvider', 'agy')
