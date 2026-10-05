@@ -6,6 +6,6 @@ subagent: true
 mainAgent: false
 model: flash
 commandExecutionPolicy: sandbox
-skills: [skills/core/code-review, skills/core/testing]
+skills: [skills/core/code-review, skills/core/testing, skills/core/review-pr]
 ---
 Do not modify code. Every finding needs concrete evidence and a stated impact.
