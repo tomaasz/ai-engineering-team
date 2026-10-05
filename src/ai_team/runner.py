@@ -712,9 +712,20 @@ def _execute(project, config, rd, run_id, base, branch, user_prompt, primary, ve
         diff_check = _git(project, 'diff', '--check', base, check=False)
         (rd / 'final-diff-check.txt').write_text((diff_check.stdout or '') + (diff_check.stderr or ''), encoding='utf-8')
         report['diffCheckExitCode'] = diff_check.returncode
+
+        from .codeguardian import scan_diff_for_secrets
+        diff_full = _git(project, 'diff', base, check=False).stdout
+        secret_findings = scan_diff_for_secrets(diff_full)
+        report['secretFindings'] = [f.to_dict() for f in secret_findings]
+        if secret_findings:
+            save_json(rd / 'codeguardian-leaks.json', [f.to_dict() for f in secret_findings])
+            print("\n[CodeGuardian ERROR] Security leak detected! Secret or API key found in changes.")
+            for f in secret_findings:
+                print(f"  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}")
+
         if _git(project, 'branch', '--show-current').stdout.strip() != branch:
             raise RuntimeError('Agent changed the active branch')
-        if verdict['verdict'] == 'CHANGES_REQUIRED' or diff_check.returncode or any(x['exitCode'] for x in report['checks']):
+        if verdict['verdict'] == 'CHANGES_REQUIRED' or diff_check.returncode or secret_findings or any(x['exitCode'] for x in report['checks']):
             report['status'] = 'CHANGES_REQUIRED'
             return 2
         report['status'] = 'PASS_WITH_NOTES' if not report['checks'] or verdict['verdict'] == 'PASS_WITH_NOTES' else 'PASS'
@@ -764,6 +775,22 @@ def _prompt_worktree_merge(project, base, branch, current, run_id, config,
             print(f"\n[OK] Zmiany odrzucone (--auto-discard). Gałąź robocza '{branch}' została usunięta.")
         else:
             print(f"\n[OK] Changes discarded (--auto-discard). Temporary branch '{branch}' has been deleted.")
+        return
+
+    from .codeguardian import scan_diff_for_secrets
+    diff_full_proc = _git(project, 'diff', f'{base}...{branch}', check=False)
+    secret_findings = scan_diff_for_secrets(diff_full_proc.stdout)
+    if secret_findings:
+        if lang == 'pl':
+            print(f"\n[CodeGuardian ERROR] Wykryto wyciek sekretów w gałęzi '{branch}'! Scalenie zablokowane.")
+            for f in secret_findings:
+                print(f"  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}")
+            print("Usuń wrażliwe dane przed scaleniem do głównej gałęzi.\n")
+        else:
+            print(f"\n[CodeGuardian ERROR] Security leak detected in branch '{branch}'! Merge blocked.")
+            for f in secret_findings:
+                print(f"  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}")
+            print("Please remove credentials before merging.\n")
         return
 
     if auto_merge or config.get('autoMerge', False):
@@ -944,7 +971,17 @@ def run_team(project, user_prompt, use_worktree=None, auto_merge=None, auto_disc
             status_out = _git(worktree_dir, 'status', '--porcelain', check=False).stdout.strip()
             if status_out:
                 _git(worktree_dir, 'add', '-A', check=False)
-                _git(worktree_dir, 'commit', '-m', f"ai({run_id}): {user_prompt[:72]}", check=False)
+                from .codeguardian import validate_git_diff
+                secret_findings = validate_git_diff(worktree_dir, staged=True)
+                if secret_findings:
+                    print("\n[CodeGuardian ERROR] Security leak detected! Commit blocked.")
+                    print("The following secrets/credentials were discovered in the git diff:")
+                    for f in secret_findings:
+                        print(f"  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}")
+                    print("Automated commit aborted to prevent credential exposure.\n")
+                    rc = 1
+                else:
+                    _git(worktree_dir, 'commit', '-m', f"ai({run_id}): {user_prompt[:72]}", check=False)
             _git(project, 'worktree', 'remove', '--force', str(worktree_dir), check=False)
             if worktree_dir.exists():
                 shutil.rmtree(worktree_dir, ignore_errors=True)
@@ -1067,6 +1104,15 @@ def review_run(project, run_id=None, action=None, keep_branch=False):
             return 0
         if _git(project, 'status', '--porcelain').stdout.strip():
             print('Cannot merge: working tree has uncommitted changes. Stash or commit first.')
+            return 1
+        from .codeguardian import scan_diff_for_secrets
+        merge_diff = _git(project, 'diff', f'{base}...{branch}', check=False).stdout if base else _git(project, 'diff', f'{current}...{branch}', check=False).stdout
+        secret_findings = scan_diff_for_secrets(merge_diff)
+        if secret_findings:
+            print(f"[CodeGuardian ERROR] Cannot merge branch '{branch}': security leak detected!")
+            for f in secret_findings:
+                print(f"  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}")
+            print("Please remove sensitive credentials before merging.")
             return 1
         print(f"Merging branch '{branch}' into '{current}'...")
         proc = _git(project, 'merge', '--no-ff', '-m', f"Merge branch '{branch}' (run {run_id})", branch, check=False)

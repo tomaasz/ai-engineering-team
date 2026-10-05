@@ -242,6 +242,11 @@ def install(project: Path, profile_name: str, lang: str = 'en'):
     if 'ai-team.config.json' in seeded:
         _apply_config_defaults(project, profile, lang)
     _ensure_gitignores(project)
+    try:
+        from .codeguardian import install_git_hook
+        install_git_hook(project)
+    except Exception:
+        pass
     _save(project, profile_name, managed, conflicts, lang=lang)
     return managed
 
@@ -601,9 +606,22 @@ def onboard(project: Path, profile_name='auto', solo=None, lang='pl', provider=N
     # 7. Git commit
     if not no_commit:
         import subprocess
+        from .codeguardian import validate_git_diff, install_git_hook
+        try:
+            install_git_hook(project)
+        except Exception:
+            pass
         status = subprocess.run(['git', 'status', '--porcelain'], cwd=str(project), capture_output=True, text=True)
         if status.stdout.strip():
             subprocess.run(['git', 'add', '.'], cwd=str(project), check=True)
+            findings = validate_git_diff(project, staged=True)
+            if findings:
+                print("\n[CodeGuardian ERROR] Wykryto próbę zatwierdzenia sekretów/kluczy API w gicie!")
+                print("Zatwierdzenie (commit) zablokowane ze względów bezpieczeństwa:")
+                for f in findings:
+                    print(f"  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}")
+                print("Usuń klucze lub poświadczenia przed kontynuacją.\n")
+                return 1
             subprocess.run(['git', 'commit', '-m', 'chore: setup ai-engineering-team (automated onboarding)'],
                            cwd=str(project), check=True)
             print("[GIT] Zatwierdzono konfigurację w repozytorium Git")

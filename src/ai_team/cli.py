@@ -117,6 +117,11 @@ def parser():
     x.add_argument('--output', default='docs/audit.sarif', help='Output SARIF file path (default: docs/audit.sarif)')
     x.add_argument('project', nargs='?', default='.')
 
+    x = s.add_parser('check-secrets', aliases=['codeguardian'], help='Scan git diff for secret and credential leaks (CodeGuardian)')
+    x.add_argument('project', nargs='?', default='.')
+    x.add_argument('--staged', action='store_true', help='Check only staged git changes')
+    x.add_argument('--base', default=None, help='Base git ref to diff against')
+
     return p
 
 def main():
@@ -355,6 +360,18 @@ def main():
                 return 1
             exported = export_sarif(src_path, out_path)
             print(f"Wyeksportowano raport SARIF 2.1.0 do {exported}")
+            return 0
+        if a.command in ('check-secrets', 'codeguardian'):
+            from .codeguardian import validate_git_diff
+            findings = validate_git_diff(project, base_ref=getattr(a, 'base', None), staged=getattr(a, 'staged', False))
+            if findings:
+                print('[CodeGuardian ERROR] Security leak detected! Commit blocked.')
+                print('The following secrets/credentials were discovered in the git diff:')
+                for f in findings:
+                    print(f'  - [{f.secret_type}] {f.file_path}:{f.line_number} -> {f.redacted_preview}')
+                print('Please remove sensitive credentials before committing changes.')
+                return 1
+            print('[CodeGuardian OK] No secrets or API credentials found in diff.')
             return 0
     except Exception as e:
         print('ERROR:', e, file=sys.stderr)
