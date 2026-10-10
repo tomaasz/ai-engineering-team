@@ -1,4 +1,5 @@
 """Durability and subprocess-isolation fixes from the 2026-09 framework audit."""
+import json
 import os
 import subprocess
 import sys
@@ -173,3 +174,79 @@ def test_review_prompt_carries_the_project_skills(project):
     finally:
         runner._capture = _capture
     assert 'correctness > security > data loss' in prompts[0], 'code-review skill was not injected'
+
+
+def test_claude_command_uses_json_output_format():
+    cmd = runner._command({}, 'claude', 'task', 'orchestrator')
+    assert '--output-format' in cmd
+    assert cmd[cmd.index('--output-format') + 1] == 'json'
+
+
+def test_claude_response_verified_by_stop_reason_end_turn(tmp_path):
+    rd = tmp_path / 'run'
+    rd.mkdir()
+
+    def capture(cmd, cwd, out, err, allow_failure=False, timeout=None):
+        envelope = {
+            "duration_api_ms": 1200,
+            "stop_reason": "end_turn",
+            "is_error": False,
+            "subtype": "success",
+            "result": "Clean finalized implementation plan."
+        }
+        out.write_text(json.dumps(envelope), encoding='utf-8')
+        return 0
+
+    runner._capture = capture
+    try:
+        answer = _ask({}, tmp_path, rd, 'claude', 'task', 'orchestrator', 'primary.md')
+    finally:
+        runner._capture = _capture
+    assert answer == "Clean finalized implementation plan."
+    assert (rd / 'primary.md').read_text(encoding='utf-8') == "Clean finalized implementation plan."
+
+
+def test_claude_response_aborted_when_stop_reason_not_end_turn(tmp_path):
+    rd = tmp_path / 'run'
+    rd.mkdir()
+
+    def capture(cmd, cwd, out, err, allow_failure=False, timeout=None):
+        envelope = {
+            "duration_api_ms": 1200,
+            "stop_reason": "max_tokens",
+            "is_error": False,
+            "subtype": "truncated",
+            "result": "Truncated cut off..."
+        }
+        out.write_text(json.dumps(envelope), encoding='utf-8')
+        return 0
+
+    runner._capture = capture
+    try:
+        with pytest.raises(RuntimeError, match=r"stop_reason='max_tokens' \(expected 'end_turn'\)"):
+            _ask({}, tmp_path, rd, 'claude', 'task', 'orchestrator', 'primary.md')
+    finally:
+        runner._capture = _capture
+
+
+def test_claude_response_aborted_when_is_error(tmp_path):
+    rd = tmp_path / 'run'
+    rd.mkdir()
+
+    def capture(cmd, cwd, out, err, allow_failure=False, timeout=None):
+        envelope = {
+            "duration_api_ms": 500,
+            "stop_reason": "end_turn",
+            "is_error": True,
+            "result": "Overloaded API error"
+        }
+        out.write_text(json.dumps(envelope), encoding='utf-8')
+        return 0
+
+    runner._capture = capture
+    try:
+        with pytest.raises(RuntimeError, match=r"Claude \(orchestrator\) failed with error: Overloaded API error"):
+            _ask({}, tmp_path, rd, 'claude', 'task', 'orchestrator', 'primary.md')
+    finally:
+        runner._capture = _capture
+
