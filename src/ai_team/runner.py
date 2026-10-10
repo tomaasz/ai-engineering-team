@@ -177,7 +177,7 @@ def _command(config, provider, prompt, role, readonly=False, output=None):
         perm = 'plan' if readonly else 'acceptEdits'
         cmd = ['claude', '-p', prompt, '--bare', '--no-session-persistence',
                '--permission-mode', perm,
-               '--output-format', 'text', '--max-turns', '30']
+               '--output-format', 'json', '--max-turns', '30']
         if not readonly and (config.get('antigravity', {}).get('fullAuto', False) or config.get('fullAuto', False)):
             cmd.append('--dangerously-skip-permissions')
     model = _model(config, provider, role)
@@ -275,6 +275,33 @@ def _record_learnings(project, run_id, report):
     learnings_file.write_text(existing + new_entry, encoding='utf-8')
 
 
+def _verify_and_unpack_claude_response(out_path, role):
+    """Verify that Claude CLI finished with technical marker stop_reason == 'end_turn',
+    and unpack the clean result into the stage output file."""
+    if not out_path.exists():
+        return
+    raw = _read(out_path).strip()
+    if not raw:
+        return
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return
+    if isinstance(data, dict):
+        stop_reason = data.get('stop_reason')
+        if stop_reason is not None:
+            if stop_reason != 'end_turn':
+                raise RuntimeError(
+                    f"Claude ({role}) ended abnormally with stop_reason='{stop_reason}' (expected 'end_turn'). "
+                    f"Task was truncated or interrupted."
+                )
+            if data.get('is_error'):
+                err_msg = data.get('result') or data.get('error') or 'Unknown error'
+                raise RuntimeError(f"Claude ({role}) failed with error: {err_msg}")
+            if 'result' in data:
+                out_path.write_text(data['result'] or '', encoding='utf-8')
+
+
 def _ask(config, project, rd, provider, prompt, role, filename, readonly=False):
     out, done = rd / filename, rd / (filename + '.done')
     if out.exists() and done.exists():
@@ -294,6 +321,8 @@ def _ask(config, project, rd, provider, prompt, role, filename, readonly=False):
         if not final.exists():
             raise RuntimeError(f'Missing final answer from {provider} ({role}): {final}')
         out.write_text(_read(final), encoding='utf-8')
+    if provider == 'claude':
+        _verify_and_unpack_claude_response(out, role)
     if readonly:
         if run_before != _run_snapshot(rd, filename):
             raise RuntimeError(f'Stage {role} ({provider}) is read-only but wrote to the run directory')
