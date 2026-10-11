@@ -644,3 +644,41 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for co
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+<!-- VERIFIED-PROJECT-OVERVIEW:BEGIN -->
+## Opis projektu i technologii
+
+**Cel:** Koordynowanie agentów Gemini, Claude i Codex pracujących nad kodem, z podziałem ról i niezależnym sprawdzaniem zmian.
+
+**Sprawdzono:** 2026-10-11, na podstawie plików repozytorium z [commitu `7094b1829b`](https://github.com/tomaasz/ai-engineering-team/commit/7094b1829b69dc0b3243b832509f408f5052ad6b).
+Opis plików nie potwierdza, że aplikacja jest wdrożona, działa bez błędów ani że wszystkie zadeklarowane narzędzia są używane.
+
+### Technologie i narzędzia
+
+- Główny język według GitHuba: **Python**.
+- Rozpoznane technologie w wybranych manifestach: Python, pytest.
+- Narzędzia zadeklarowane w wybranych plikach: GitHub Actions, Python CLI:ai-team, pytest, setuptools, uv.
+
+### Wybrane pakiety
+
+| Pakiet | Wymaganie z manifestu | Plik |
+|---|---|---|
+| pytest | >=7.0 | pyproject.toml |
+| build | >=1.0 | pyproject.toml |
+| tomli | zewnętrzne źródło lub warunek (adres pominięty) | pyproject.toml |
+| python | >=3.10 | pyproject.toml |
+
+To wybrane deklaracje, nie pełna lista i nie wynik pomiaru wersji uruchomionej aplikacji. Pełny wykaz zależności oraz lockfile, jeżeli istnieje, pozostają w repozytorium.
+
+### Skąd pochodzą informacje
+
+- [`README.md`](README.md).
+- [`pyproject.toml`](pyproject.toml).
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+- [`.github/workflows/test.yml`](.github/workflows/test.yml).
+- [`uv.lock`](uv.lock).
+
+### Zakres sprawdzenia
+
+Przegląd obejmuje wybrane pliki gałęzi domyślnej. Nie uruchamiano aplikacji ani nie zmieniano wdrożeń. Limity przeglądu mogą pomijać część modułów; brak pozycji w tym opisie nie dowodzi braku funkcji lub narzędzia.
+<!-- VERIFIED-PROJECT-OVERVIEW:END -->
