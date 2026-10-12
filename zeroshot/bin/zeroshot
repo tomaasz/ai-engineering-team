@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Zeroshot CLI wrapper for ai-engineering-team trial branch
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# 1. Check explicit ZEROSHOT_BIN
+if [[ -n "${ZEROSHOT_BIN:-}" && -x "${ZEROSHOT_BIN}" ]]; then
+    exec "${ZEROSHOT_BIN}" "$@"
+fi
+
+# 2. Check system PATH
+if command -v zeroshot >/dev/null 2>&1; then
+    exec zeroshot "$@"
+fi
+
+# 3. Check known npm cache locations
+NPM_NATIVE_PATHS=(
+    "/home/tomaasz/.cache/npm/_npx/f4959877fc7f2822/node_modules/@the-open-engine-company/zeroshot/bin/native/zeroshot"
+    "${HOME}/.cache/npm/_npx/*/node_modules/@the-open-engine-company/zeroshot/bin/native/zeroshot"
+)
+
+for path_pattern in "${NPM_NATIVE_PATHS[@]}"; do
+    for candidate in ${path_pattern}; do
+        if [[ -x "${candidate}" ]]; then
+            exec "${candidate}" "$@"
+        fi
+    done
+done
+
+# 4. Fallback: run via npx
+exec npx @the-open-engine-company/zeroshot "$@"
