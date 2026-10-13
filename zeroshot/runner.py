@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -69,6 +70,18 @@ def resolve_zeroshot_bin() -> str:
     raise FileNotFoundError("Zeroshot executable could not be resolved.")
 
 
+def _build_command(bin_path: str, *args: str) -> List[str]:
+    """Prepare command line with cross-platform shell script handling."""
+    if sys.platform == "win32":
+        if not bin_path.lower().endswith((".exe", ".bat", ".cmd")):
+            bash = shutil.which("bash") or shutil.which("sh")
+            if bash:
+                return [bash, bin_path, *args]
+            comspec = os.environ.get("ComSpec", "cmd.exe")
+            return [comspec, "/c", "npx", "@the-open-engine-company/zeroshot", *args]
+    return [bin_path, *args]
+
+
 def validate_zeroshot_graph(
     graph_path: Path | str,
     runtime_path: Path | str,
@@ -76,7 +89,7 @@ def validate_zeroshot_graph(
 ) -> bool:
     """Validate graph, runtime-config and input JSON definitions using Zeroshot engine."""
     bin_path = resolve_zeroshot_bin()
-    cmd = [
+    cmd = _build_command(
         bin_path,
         "run",
         "--title",
@@ -88,7 +101,7 @@ def validate_zeroshot_graph(
         "--input",
         str(input_path),
         "--validate-only",
-    ]
+    )
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
         return False
@@ -108,7 +121,7 @@ def run_zeroshot_verification(
 ) -> ZeroshotRunResult:
     """Execute Zeroshot verification graph with timing and metric tracking."""
     bin_path = resolve_zeroshot_bin()
-    cmd = [
+    cmd = _build_command(
         bin_path,
         "run",
         "--title",
@@ -119,7 +132,7 @@ def run_zeroshot_verification(
         str(runtime_path),
         "--input",
         str(input_path),
-    ]
+    )
     start_time = time.monotonic()
     cwd = str(target_cwd) if target_cwd else None
 
