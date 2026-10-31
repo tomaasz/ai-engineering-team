@@ -1,0 +1,3 @@
+{
+  "task": "Wykryj i napraw celowo wprowadzony błąd składniowy w pliku src/ai_team/sample.py. Uruchom pytest i upewnij się, że kod kompiluje się bez błędów i wszystkie testy przechodzą pomyślnie."
+}

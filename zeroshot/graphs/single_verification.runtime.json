@@ -1,0 +1,17 @@
+{
+  "harness": "codex",
+  "provider": "openai",
+  "size": "medium",
+  "nodes": {
+    "worker": {
+      "kind": "agent",
+      "model": "gpt-5.6-sol",
+      "sessionScope": "node_instance"
+    },
+    "verifier": {
+      "kind": "agent",
+      "model": "gpt-5.6-sol",
+      "sessionScope": "execution"
+    }
+  }
+}
